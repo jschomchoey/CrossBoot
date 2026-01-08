@@ -1,16 +1,27 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 function App() {
   const [drives, setDrives] = useState([]);
   const [selectedDisk, setSelectedDisk] = useState("");
+  const [isoPath, setIsoPath] = useState("");
+
+  useEffect(() => {
+    handleScan();
+  }, []);
 
   const handleScan = async () => {
     const list = await window.electronAPI.getDisks();
     setDrives(list);
 
-    // เพิ่มตรงนี้: ถ้าเจอ Drive อย่างน้อย 1 ตัว ให้เลือกตัวแรกทันที
     if (list.length > 0) {
       setSelectedDisk(list[0].device);
+    }
+  };
+
+  const handleSelectIso = async () => {
+    const path = await window.electronAPI.selectIso();
+    if (path) {
+      setIsoPath(path); // ได้ path จริง เช่น /Users/name/Downloads/windows.iso
     }
   };
 
@@ -23,7 +34,6 @@ function App() {
           value={selectedDisk}
           onChange={(e) => setSelectedDisk(e.target.value)}
         >
-          {/* ซ่อน Option นี้ถ้ามีข้อมูลแล้ว หรือจะเอาออกไปเลยก็ได้ถ้าต้องการให้บังคับเลือกเสมอ */}
           {drives.length === 0 && (
             <option value="" disabled>
               -- No USB Found --
@@ -32,10 +42,15 @@ function App() {
 
           {drives.map((drive, index) => (
             <option key={index} value={drive.device}>
-              {drive.description} ({drive.size})
+              {drive.description} (
+              {drive.size ? `${(drive.size / 1e9).toFixed(2)} GB` : "Unknown"})
             </option>
           ))}
         </select>
+      </div>
+      <div>
+        <button onClick={handleSelectIso}>Select ISO</button>
+        <span>ISO Path: {isoPath || "No ISO Selected"}</span>
       </div>
     </div>
   );

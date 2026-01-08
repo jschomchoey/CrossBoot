@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain, dialog } from "electron";
 import { fileURLToPath } from "url";
 import path from "path";
 import drivelist from "drivelist";
@@ -28,12 +28,26 @@ app.whenReady().then(() => {
       const filteredDrives = drives.filter(
         (drive) => !drive.isSystem && drive.isRemovable && drive.isUSB
       );
-      //   console.log(filteredDrives);
       return filteredDrives; // Return filtered disks
     } catch (error) {
       console.error(error);
       return [];
     }
+  });
+
+  ipcMain.handle("select-iso", async () => {
+    const result = await dialog.showOpenDialog({
+      properties: ["openFile"],
+      filters: [
+        { name: "Disk Image (ISO)", extensions: ["iso"] }, // .iso
+      ],
+    });
+
+    if (result.canceled) {
+      return null;
+    }
+
+    return result.filePaths[0];
   });
 
   createWindow();
