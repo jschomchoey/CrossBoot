@@ -2,6 +2,10 @@ import { app, BrowserWindow, ipcMain, dialog } from "electron";
 import { fileURLToPath } from "url";
 import path from "path";
 import drivelist from "drivelist";
+import { exec } from "child_process";
+import util from "util";
+
+const execPromise = util.promisify(exec);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -48,6 +52,28 @@ app.whenReady().then(() => {
     }
 
     return result.filePaths[0];
+  });
+
+  ipcMain.handle("format-usb", async (event, diskPath) => {
+    console.log(`Starting format on: ${diskPath}`);
+
+    // prevent formatting system disk
+    if (!diskPath || diskPath.includes("disk0")) {
+      return { success: false, message: "Invalid disk path (Safety blocked)" };
+    }
+
+    try {
+      // diskutil eraseDisk [Format] [Name] [Scheme] [Device]
+      const command = `diskutil eraseDisk MS-DOS "Windows" MBR "${diskPath}"`;
+
+      const { stdout, stderr } = await execPromise(command);
+      //   console.log("Format Output:", stdout);
+
+      return { success: true, message: "Format Complete" };
+    } catch (error) {
+      console.error("Format Error:", error);
+      return { success: false, message: error.message };
+    }
   });
 
   createWindow();
