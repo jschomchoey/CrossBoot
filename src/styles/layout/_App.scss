@@ -20,7 +20,21 @@
                 padding: 1rem;
                 background-color: #FFF;
                 box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+
+                .destination-disk-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+
+                    svg {
+                        cursor: pointer;
+                        width: 1.125rem;
+                        height: 1.125rem;
+                    }
+                }
             }
+
+
 
         }
     }

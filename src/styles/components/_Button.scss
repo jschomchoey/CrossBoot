@@ -26,4 +26,12 @@
             opacity: 0.6;
         }
     }
+
+    &-text {
+        background: none;
+        box-shadow: none;
+        text-shadow: none;
+        // color: #007bff;
+        padding: 0;
+    }
 }

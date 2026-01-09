@@ -28,7 +28,7 @@
             &::after {
                 content: '';
                 position: absolute;
-                left: 0.25rem;
+                left: 0.215rem;
                 top: 0.05rem;
                 width: 0.25rem;
                 height: 0.5rem;
@@ -48,5 +48,6 @@
         color: #374151;
         font-size: 0.9rem;
         margin: 0;
+        width: 100%;
     }
 }

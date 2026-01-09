@@ -19,6 +19,7 @@ const createWindow = () => {
   const win = new BrowserWindow({
     width: 600,
     height: 550,
+    resizable: false,
     icon: path.join(__dirname, "..", "src", "assets", "icon", "icon.icns"),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -27,7 +28,6 @@ const createWindow = () => {
     },
   });
 
-  // Load from dev server in development, or from built files in production
   if (process.env.VITE_DEV_SERVER_URL) {
     win.loadURL(process.env.VITE_DEV_SERVER_URL);
   } else {
