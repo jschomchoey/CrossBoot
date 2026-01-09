@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import "./styles/main.scss";
 
 function App() {
   const [drives, setDrives] = useState([]);
@@ -121,6 +122,10 @@ function App() {
   return (
     <div>
       <div>
+        <button onClick={handleSelectIso}>Select ISO</button>
+        <span>ISO Path: {isoPath || "No ISO Selected"}</span>
+      </div>
+      <div>
         <button onClick={handleScan}>Scan USB</button>
 
         <select
@@ -141,10 +146,7 @@ function App() {
           ))}
         </select>
       </div>
-      <div>
-        <button onClick={handleSelectIso}>Select ISO</button>
-        <span>ISO Path: {isoPath || "No ISO Selected"}</span>
-      </div>
+
       <div>
         <button
           onClick={handleStart}
