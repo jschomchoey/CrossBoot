@@ -35,11 +35,11 @@ function App() {
         setStatus(`Splitting WIM file... ${data.percent}%`);
       } else if (data.stage === "copy") {
         if (hasSplitRef.current) {
-          // Split: 15% -> 100%
-          calculated = 15 + data.percent * 0.85;
+          // Split: 15% -> 99%
+          calculated = 15 + data.percent * 0.84;
         } else {
-          // Split: 5% -> 100%
-          calculated = 5 + data.percent * 0.95;
+          // Split: 5% -> 99%
+          calculated = 5 + data.percent * 0.94;
         }
 
         setStatus(`Copying files... ${data.percent}%`);
