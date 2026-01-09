@@ -46,7 +46,7 @@ function App() {
         setCurrentFile(data.currentFile);
       }
 
-      setTotalProgress(calculated);
+      setTotalProgress(parseFloat(calculated.toFixed(2)));
     });
 
     return () => {
