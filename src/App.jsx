@@ -81,7 +81,6 @@ function App() {
     if (!window.confirm(`ERASE Everything on "${driveName}"?`)) return;
 
     setIsProcessing(true);
-    setProgress(0);
     setCurrentFile("");
 
     setTotalProgress(0);
@@ -89,7 +88,6 @@ function App() {
 
     try {
       // Step 1: Format
-      setCurrentAction("format");
       setStatus("Formatting USB...");
       setTotalProgress(2);
       const formatRes = await window.electronAPI.formatUsb(selectedDisk);
@@ -97,13 +95,11 @@ function App() {
       setTotalProgress(5);
 
       // Step 2: Prepare ISO
-      setCurrentAction("analyze");
       setStatus("Analyzing ISO and Checking WIM size...");
       const isoRes = await window.electronAPI.prepareIso(isoPath);
       if (!isoRes.success) throw new Error(isoRes.message);
 
       // Step 3: Copy
-      setCurrentAction("copy");
       setStatus("Starting file copy...");
       const copyRes = await window.electronAPI.copyToUsb({
         isoMountPoint: isoRes.mountPoint,
