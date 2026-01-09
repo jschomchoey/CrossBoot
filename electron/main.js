@@ -1,8 +1,14 @@
-import { app, BrowserWindow, ipcMain, dialog } from "electron";
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  dialog,
+  powerSaveBlocker,
+} from "electron";
 import { fileURLToPath } from "url";
+import { exec, spawn } from "child_process";
 import path from "path";
 import drivelist from "drivelist";
-import { exec, spawn } from "child_process";
 import util from "util";
 import fs from "fs/promises";
 import fsLegacy from "fs";
@@ -155,6 +161,7 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle("prepare-iso", async (event, isoPath) => {
+    const blockerId = powerSaveBlocker.start("prevent-display-sleep");
     const webContents = event.sender;
 
     let mountPoint = "";
@@ -250,6 +257,10 @@ app.whenReady().then(() => {
         } catch (e) {}
       }
       return { success: false, message: error.message };
+    } finally {
+      if (powerSaveBlocker.isStarted(blockerId)) {
+        powerSaveBlocker.stop(blockerId);
+      }
     }
   });
 
