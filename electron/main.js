@@ -36,7 +36,7 @@ const createWindow = () => {
     width: 600,
     height: 550,
     resizable: false,
-    icon: path.join(__dirname, "..", "src", "assets", "icon", "icon.icns"),
+    icon: getIconPath(),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -448,28 +448,7 @@ app.whenReady().then(async () => {
   ipcMain.handle("show-dialog", async (event, { type, title, message }) => {
     const win = BrowserWindow.fromWebContents(event.sender);
 
-    // เลือก path icon ให้ถูกตาม OS
-    let iconPath;
-    if (process.platform === "darwin") {
-      // macOS มักใช้ icon ของแอปอยู่แล้ว แต่ถ้าอยากบังคับให้ใช้รูปอื่น:
-      iconPath = path.join(
-        __dirname,
-        "..",
-        "src",
-        "assets",
-        "icon",
-        "icon_2.png"
-      );
-    } else {
-      iconPath = path.join(
-        __dirname,
-        "..",
-        "src",
-        "assets",
-        "icon",
-        "icon.png"
-      );
-    }
+    const iconPath = getIconPath();
 
     const result = await dialog.showMessageBox(win, {
       type: type || "info", // 'info', 'error', 'question', 'warning'
@@ -477,7 +456,7 @@ app.whenReady().then(async () => {
       message: message,
       buttons: ["OK"],
       defaultId: 0,
-      icon: iconPath, // <-- บรรทัดนี้จะบังคับเปลี่ยน Icon
+      icon: iconPath,
     });
 
     return result.response;
@@ -485,9 +464,7 @@ app.whenReady().then(async () => {
 
   // Set dock icon for macOS
   if (process.platform === "darwin") {
-    app.dock.setIcon(
-      path.join(__dirname, "..", "src", "assets", "icon", "icon_2.png")
-    );
+    app.dock.setIcon(getIconPath());
   }
 
   createWindow();
