@@ -19,7 +19,17 @@ const execPromise = util.promisify(exec);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const WIMLIB_PATH = path.join(__dirname, "wimlib", "wimlib-imagex");
+const WIMLIB_PATH = app.isPackaged
+  ? path.join(process.resourcesPath, "wimlib", "wimlib-imagex")
+  : path.join(__dirname, "wimlib", "wimlib-imagex");
+
+const getIconPath = () => {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, "icon", "icon_2.png");
+  } else {
+    return path.join(__dirname, "..", "src", "assets", "icon", "icon_2.png");
+  }
+};
 
 const createWindow = () => {
   const win = new BrowserWindow({
