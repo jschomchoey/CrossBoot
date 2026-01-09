@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import DriveSelector from "./components/DriveSelector";
 import "./styles/main.scss";
 
 function App() {
@@ -17,11 +18,15 @@ function App() {
   useEffect(() => {
     handleScan();
 
+    // const scanInterval = setInterval(() => {
+    //   handleScan();
+    // }, 2000);
+
     const removeListener = window.electronAPI.onProgress((data) => {
       let calculated = 0;
 
       if (data.stage === "split") {
-        hasSplitRef.current = true; // Split
+        hasSplitRef.current = true;
         // Split: 5% -> 15%
         calculated = 5 + data.percent * 0.1;
         setStatus(`Splitting WIM file... ${data.percent}%`);
@@ -42,6 +47,7 @@ function App() {
     });
 
     return () => {
+      // clearInterval(scanInterval);
       window.electronAPI.removeProgressListeners();
     };
   }, []);
@@ -125,60 +131,71 @@ function App() {
   };
 
   return (
-    <div>
-      <div>
-        <button onClick={handleSelectIso}>Select ISO</button>
-        <span>ISO Path: {isoPath || "No ISO Selected"}</span>
-      </div>
-      <div>
-        <button onClick={handleScan}>Scan USB</button>
-
-        <select
-          value={selectedDisk}
-          onChange={(e) => setSelectedDisk(e.target.value)}
-        >
-          {drives.length === 0 && (
-            <option value="" disabled>
-              -- No USB Found --
-            </option>
+    <div className="safe-margin">
+      <div className="app-wrapper">
+        <div>
+          <button onClick={handleSelectIso}>Select ISO</button>
+          {isoPath ? (
+            <div>
+              <p>File: {isoName || isoPath}</p>
+              {isoSize && <p>Size: {isoSize}</p>}
+              <p className="text-small">Path: {isoPath}</p>
+            </div>
+          ) : (
+            <span>No ISO Selected</span>
           )}
+        </div>
+        <div className="destination-disk">
+          <div className="destination-disk-wrapper">
+            {/* <button onClick={handleScan}>Scan USB</button> */}
+            <p className="text-bold">Destination Disk</p>
 
-          {drives.map((drive, index) => (
-            <option key={index} value={drive.device}>
-              {drive.description} (
-              {drive.size ? `${(drive.size / 1e9).toFixed(2)} GB` : "Unknown"})
-            </option>
-          ))}
-        </select>
-      </div>
+            <DriveSelector
+              drives={drives}
+              selectedDrive={selectedDisk}
+              onSelectDrive={setSelectedDisk}
+            />
+          </div>
+        </div>
+        <div className="mb-3">
+          <p className="text-bold mb-1">Advanced Options</p>
+          <div className="custom-checkbox">
+            <input
+              type="checkbox"
+              name="advancedOption"
+              id="bypass-requirements"
+            />
+            <label htmlFor="bypass-requirements">
+              Bypass Windows 11 Requirements
+            </label>
+          </div>
+        </div>
 
-      <div>
         <button
+          className="btn btn-primary mb-2"
           onClick={handleStart}
           disabled={isProcessing || !isoPath || !selectedDisk}
         >
-          START
+          Start
         </button>
-        <div
-          style={{
-            width: "100%",
-            height: "5px",
-            border: "1px solid black",
-            borderRadius: "5px",
-            marginTop: "5px",
-          }}
-        >
-          <div
-            style={{
-              width: `${totalProgress}%`,
-              height: "100%",
-              backgroundColor: "blue",
-              transition: "width 0.2s ease",
-            }}
-          ></div>
+        <div className="progress">
+          <div className="progress-bar mb-2">
+            <div
+              className="progress-bar-inner"
+              style={{
+                width: `${totalProgress}%`,
+              }}
+            ></div>
+          </div>
+          <div className="status">
+            <p>Status: {status || "Ready"}</p>
+            <p>Total: {totalProgress}%</p>
+          </div>
+
+          {/* {isProcessing && currentFile && (
+            <p className="status-current">Writing: {currentFile}</p>
+          )} */}
         </div>
-        <span>Status: {status}</span>
-        {isProcessing && currentFile && <div>Writing: {currentFile}</div>}
       </div>
     </div>
   );
