@@ -19,6 +19,7 @@ const createWindow = () => {
   const win = new BrowserWindow({
     width: 600,
     height: 550,
+    icon: path.join(__dirname, "..", "src", "assets", "icon", "icon.icns"),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -26,8 +27,13 @@ const createWindow = () => {
     },
   });
 
-  win.loadURL("http://localhost:5173");
-  win.webContents.openDevTools();
+  // Load from dev server in development, or from built files in production
+  if (process.env.VITE_DEV_SERVER_URL) {
+    win.loadURL(process.env.VITE_DEV_SERVER_URL);
+  } else {
+    win.loadFile(path.join(__dirname, "..", "dist", "index.html"));
+  }
+  // win.webContents.openDevTools();
 };
 
 // --- Helper Functions ---
@@ -388,6 +394,13 @@ app.whenReady().then(() => {
       }
     }
   );
+
+  // Set dock icon for macOS
+  if (process.platform === "darwin") {
+    app.dock.setIcon(
+      path.join(__dirname, "..", "src", "assets", "icon", "icon_2.png")
+    );
+  }
 
   createWindow();
 
