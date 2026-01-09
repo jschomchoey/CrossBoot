@@ -5,12 +5,12 @@ function App() {
   const [drives, setDrives] = useState([]);
   const [selectedDisk, setSelectedDisk] = useState("");
   const [isoPath, setIsoPath] = useState("");
+  const [isoName, setIsoName] = useState("");
+  const [isoSize, setIsoSize] = useState("");
 
   const [status, setStatus] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
-
   const [currentFile, setCurrentFile] = useState("");
-
   const [totalProgress, setTotalProgress] = useState(0);
   const hasSplitRef = useRef(false);
 
@@ -56,9 +56,18 @@ function App() {
   };
 
   const handleSelectIso = async () => {
-    const path = await window.electronAPI.selectIso();
-    if (path) {
-      setIsoPath(path);
+    const result = await window.electronAPI.selectIso();
+    if (result) {
+      // Support both old format (string) and new format (object)
+      if (typeof result === "string") {
+        setIsoPath(result);
+        setIsoName("");
+        setIsoSize("");
+      } else {
+        setIsoPath(result.path);
+        setIsoName(result.name || "");
+        setIsoSize(result.size || "");
+      }
     }
   };
 

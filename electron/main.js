@@ -87,7 +87,25 @@ app.whenReady().then(() => {
       return null;
     }
 
-    return result.filePaths[0];
+    const filePath = result.filePaths[0];
+
+    // Get file stats for size and name
+    try {
+      const stats = await fs.stat(filePath);
+      const sizeInBytes = stats.size;
+      const sizeInGB = (sizeInBytes / (1024 * 1024 * 1024)).toFixed(2);
+      const fileName = path.basename(filePath);
+
+      return {
+        path: filePath,
+        name: fileName,
+        size: `${sizeInGB} GB`,
+        sizeBytes: sizeInBytes,
+      };
+    } catch (error) {
+      // Fallback to just return path if stat fails
+      return filePath;
+    }
   });
 
   ipcMain.handle("format-usb", async (event, diskPath) => {
