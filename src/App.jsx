@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 function App() {
   const [drives, setDrives] = useState([]);
@@ -8,8 +8,41 @@ function App() {
   const [status, setStatus] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
 
+  const [currentFile, setCurrentFile] = useState("");
+
+  const [totalProgress, setTotalProgress] = useState(0);
+  const hasSplitRef = useRef(false);
+
   useEffect(() => {
     handleScan();
+
+    const removeListener = window.electronAPI.onProgress((data) => {
+      let calculated = 0;
+
+      if (data.stage === "split") {
+        hasSplitRef.current = true; // Split
+        // Split: 5% -> 15%
+        calculated = 5 + data.percent * 0.1;
+        setStatus(`Splitting WIM file... ${data.percent}%`);
+      } else if (data.stage === "copy") {
+        if (hasSplitRef.current) {
+          // Split: 15% -> 100%
+          calculated = 15 + data.percent * 0.85;
+        } else {
+          // Split: 5% -> 100%
+          calculated = 5 + data.percent * 0.95;
+        }
+
+        setStatus(`Copying files... ${data.percent}%`);
+        setCurrentFile(data.currentFile);
+      }
+
+      setTotalProgress(calculated);
+    });
+
+    return () => {
+      window.electronAPI.removeProgressListeners();
+    };
   }, []);
 
   const handleScan = async () => {
@@ -29,32 +62,59 @@ function App() {
   };
 
   const handleStart = async () => {
-    if (!selectedDisk) return alert("Please select a USB drive");
-    if (!isoPath) return alert("Please select an ISO file");
+    if (!selectedDisk) return alert("Select USB");
+    if (!isoPath) return alert("Select ISO");
 
     const targetDrive = drives.find((d) => d.device === selectedDisk);
     const driveName = targetDrive ? targetDrive.description : selectedDisk;
 
-    const confirm = window.confirm(
-      `WARNING: All data on "${driveName}" will be erased. Continue?`
-    );
-    if (!confirm) return;
+    if (!window.confirm(`ERASE Everything on "${driveName}"?`)) return;
 
     setIsProcessing(true);
-    setStatus(`Formatting "${driveName}"...`);
+    setProgress(0);
+    setCurrentFile("");
+
+    setTotalProgress(0);
+    hasSplitRef.current = false;
 
     try {
-      const result = await window.electronAPI.formatUsb(selectedDisk);
+      // Step 1: Format
+      setCurrentAction("format");
+      setStatus("Formatting USB...");
+      setTotalProgress(2);
+      const formatRes = await window.electronAPI.formatUsb(selectedDisk);
+      if (!formatRes.success) throw new Error(formatRes.message);
+      setTotalProgress(5);
 
-      if (result.success) {
-        setStatus("Format Complete");
+      // Step 2: Prepare ISO
+      setCurrentAction("analyze");
+      setStatus("Analyzing ISO and Checking WIM size...");
+      const isoRes = await window.electronAPI.prepareIso(isoPath);
+      if (!isoRes.success) throw new Error(isoRes.message);
+
+      // Step 3: Copy
+      setCurrentAction("copy");
+      setStatus("Starting file copy...");
+      const copyRes = await window.electronAPI.copyToUsb({
+        isoMountPoint: isoRes.mountPoint,
+        usbDevice: selectedDisk,
+        isoAction: isoRes.action,
+        tempDir: isoRes.tempDir,
+      });
+
+      if (copyRes.success) {
+        setStatus("DONE! USB is ready.");
+        setTotalProgress(100);
+        alert("Success!");
       } else {
-        setStatus(`Error: ${result.message}`);
+        throw new Error(copyRes.message);
       }
     } catch (error) {
-      setStatus("An unexpected error occurred.");
+      console.error(error);
+      setStatus(`Error: ${error.message}`);
     } finally {
       setIsProcessing(false);
+      setCurrentFile("");
     }
   };
 
@@ -92,7 +152,26 @@ function App() {
         >
           START
         </button>
+        <div
+          style={{
+            width: "100%",
+            height: "5px",
+            border: "1px solid black",
+            borderRadius: "5px",
+            marginTop: "5px",
+          }}
+        >
+          <div
+            style={{
+              width: `${totalProgress}%`,
+              height: "100%",
+              backgroundColor: "blue",
+              transition: "width 0.2s ease",
+            }}
+          ></div>
+        </div>
         <span>Status: {status}</span>
+        {isProcessing && currentFile && <div>Writing: {currentFile}</div>}
       </div>
     </div>
   );

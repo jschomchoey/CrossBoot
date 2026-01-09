@@ -30,6 +30,39 @@ const createWindow = () => {
   win.webContents.openDevTools();
 };
 
+// --- Helper Functions ---
+
+// Find USB Mount Point
+async function getUsbMountPoint(devicePath) {
+  await new Promise((r) => setTimeout(r, 3000));
+
+  const drives = await drivelist.list();
+  const drive = drives.find((d) => d.device === devicePath);
+
+  if (drive && drive.mountpoints.length > 0) {
+    return drive.mountpoints[0].path;
+  }
+  throw new Error(
+    "Could not find USB mount point. Please try re-inserting the USB."
+  );
+}
+
+// Scan all files
+async function getAllFiles(dir) {
+  let results = [];
+  const list = await fs.readdir(dir);
+  for (const file of list) {
+    const filePath = path.join(dir, file);
+    const stat = await fs.stat(filePath);
+    if (stat && stat.isDirectory()) {
+      results = results.concat(await getAllFiles(filePath));
+    } else {
+      results.push({ path: filePath, size: stat.size });
+    }
+  }
+  return results;
+}
+
 app.whenReady().then(() => {
   ipcMain.handle("get-disks", async () => {
     try {
@@ -37,7 +70,7 @@ app.whenReady().then(() => {
       const filteredDrives = drives.filter(
         (drive) => !drive.isSystem && drive.isRemovable && drive.isUSB
       );
-      return filteredDrives; // Return filtered disks
+      return filteredDrives;
     } catch (error) {
       console.error(error);
       return [];
@@ -47,9 +80,7 @@ app.whenReady().then(() => {
   ipcMain.handle("select-iso", async () => {
     const result = await dialog.showOpenDialog({
       properties: ["openFile"],
-      filters: [
-        { name: "Disk Image (ISO)", extensions: ["iso"] }, // .iso
-      ],
+      filters: [{ name: "Disk Image (ISO)", extensions: ["iso"] }],
     });
 
     if (result.canceled) {
@@ -72,7 +103,6 @@ app.whenReady().then(() => {
       const command = `diskutil eraseDisk MS-DOS "Windows" MBR "${diskPath}"`;
 
       const { stdout, stderr } = await execPromise(command);
-      //   console.log("Format Output:", stdout);
 
       return { success: true, message: "Format Complete" };
     } catch (error) {
@@ -84,26 +114,21 @@ app.whenReady().then(() => {
   ipcMain.handle("prepare-iso", async (event, isoPath) => {
     const webContents = event.sender;
 
-    console.log(`Processing ISO: ${isoPath}`);
     let mountPoint = "";
 
     try {
-      // 1. Mount ISO -nobrowse
-      console.log("Mounting ISO...");
+      // Mount ISO -nobrowse
       const { stdout } = await execPromise(
         `hdiutil mount -nobrowse "${isoPath}"`
       );
 
-      // Parse mount point from output (e.g., /dev/disk2 /Volumes/CCCOMA_X64FRE_EN-US_DV9)
+      // Parse mount point
       const match = stdout.match(/\/Volumes\/.+/);
       if (!match) throw new Error("Failed to get mount point");
       mountPoint = match[0].trim();
-      console.log(`Mounted at: ${mountPoint}`);
 
-      // 2. Check install.wim size
       const wimPath = path.join(mountPoint, "sources", "install.wim");
 
-      // เช็คว่ามีไฟล์ไหม (บาง ISO อาจเป็น .esd)
       try {
         await fs.access(wimPath);
       } catch {
@@ -116,16 +141,13 @@ app.whenReady().then(() => {
       }
 
       const stats = await fs.stat(wimPath);
-      const sizeGB = stats.size / (1024 * 1024 * 1024);
-      console.log(`install.wim size: ${sizeGB.toFixed(2)} GB`);
+      //   const sizeGB = stats.size / (1024 * 1024 * 1024);
 
-      // 3. Logic: Split if > 4GB
+      // Split if > 4GB
       if (stats.size > 4 * 1024 * 1024 * 1024) {
-        console.log("Large file detected. Starting Split process...");
         const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "crossboot-"));
         const destPath = path.join(tempDir, "install.swm");
 
-        // ใช้ spawn แทน exec เพื่อดู Real-time progress
         return new Promise((resolve, reject) => {
           const splitProcess = spawn(WIMLIB_PATH, [
             "split",
@@ -134,15 +156,12 @@ app.whenReady().then(() => {
             "3800",
           ]);
 
-          // ดักจับค่าที่ wimlib พ่นออกมา (stdout)
+          // Capture output from wimlib
           splitProcess.stdout.on("data", (data) => {
             const output = data.toString();
-            // wimlib จะพ่น output ประมาณ: "Splitting WIM: 1250 MiB of 4500 MiB (27%) written"
-            // เราใช้ Regex หาตัวเลข %
             const match = output.match(/(\d+)%/);
             if (match) {
               const percent = parseInt(match[1]);
-              // ส่งค่ากลับไปที่ React ชื่อ channel "process-progress"
               webContents.send("process-progress", {
                 stage: "split",
                 percent: percent,
@@ -151,12 +170,11 @@ app.whenReady().then(() => {
             }
           });
 
-          // ดักจับ Error
           splitProcess.stderr.on("data", (data) => {
             console.error(`Wimlib Error: ${data}`);
           });
 
-          // เมื่อทำงานเสร็จ (Close)
+          // When finished
           splitProcess.on("close", (code) => {
             if (code === 0) {
               resolve({
@@ -175,14 +193,14 @@ app.whenReady().then(() => {
         console.log("File is under 4GB. Ready to copy.");
         return {
           success: true,
-          action: "copy", // บอกหน้าบ้านว่าแค่ copy ปกติก็พอ
+          action: "copy",
           mountPoint,
           message: "WIM file is small enough, no split needed.",
         };
       }
     } catch (error) {
       console.error("ISO Process Error:", error);
-      // ถ้า Error ให้พยายาม Unmount ทิ้งด้วย
+      // Unmount if error
       if (mountPoint) {
         try {
           await execPromise(`hdiutil detach "${mountPoint}" -force`);
@@ -198,20 +216,17 @@ app.whenReady().then(() => {
       const webContents = event.sender;
 
       try {
-        console.log("Starting Copy Process...");
-
-        // 5.1 Find Real USB Path
+        // Find Real USB Path
         const destRoot = await getUsbMountPoint(usbDevice);
-        console.log(`Destination: ${destRoot}`);
 
-        // 5.2 Build File List
+        // Build File List
         let filesToCopy = [];
         const isoFiles = await getAllFiles(isoMountPoint);
 
         for (const f of isoFiles) {
           const relativePath = path.relative(isoMountPoint, f.path);
 
-          // ถ้าเป็นโหมด Split ให้ข้าม install.wim ตัวใหญ่
+          // skip install.wim if splitting
           if (
             isoAction === "split" &&
             relativePath.toLowerCase().endsWith("install.wim")
@@ -226,24 +241,22 @@ app.whenReady().then(() => {
           });
         }
 
-        // ถ้า Split ให้เพิ่มไฟล์ .swm จาก Temp
+        // If splitting, add .swm files from Temp
         if (isoAction === "split" && tempDir) {
           const tempFiles = await getAllFiles(tempDir);
           for (const f of tempFiles) {
             filesToCopy.push({
               src: f.path,
-              dest: path.join(destRoot, "sources", path.basename(f.path)), // เอาลง folder sources
+              dest: path.join(destRoot, "sources", path.basename(f.path)),
               size: f.size,
             });
           }
         }
 
-        // 5.3 Calculate Total Size
+        // Calculate Total Size
         const totalBytes = filesToCopy.reduce((acc, f) => acc + f.size, 0);
         let copiedBytes = 0;
 
-        // 5.4 Copy Loop
-        // TUNE: เพิ่ม Buffer Size เป็น 32MB เพื่อความเร็ว
         const BUFFER_SIZE = 32 * 1024 * 1024;
 
         for (const file of filesToCopy) {
@@ -260,7 +273,6 @@ app.whenReady().then(() => {
             readStream.on("data", (chunk) => {
               copiedBytes += chunk.length;
 
-              // Send Progress (Throttle ได้ถ้าต้องการ)
               const percent = Math.min(
                 100,
                 Math.round((copiedBytes / totalBytes) * 100)
