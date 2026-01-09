@@ -121,7 +121,7 @@ function App() {
     const targetDrive = drives.find((d) => d.device === selectedDisk);
     const driveName = targetDrive ? targetDrive.description : selectedDisk;
 
-    if (!window.confirm(`ERASE Everything on "${driveName}"?`)) return;
+    if (!window.confirm(`Erase Everything on "${driveName}"?`)) return;
 
     setIsProcessing(true);
     setCurrentFile("");
@@ -153,14 +153,21 @@ function App() {
       });
 
       if (copyRes.success) {
-        setStatus("DONE! USB is ready.");
+        setStatus("Done. USB is ready.");
         setTotalProgress(100);
-        alert("Success!");
+        await window.electronAPI.showDialog({
+          type: "info",
+          title: "Success",
+          message: "Bootable USB Created Successfully.",
+        });
       } else {
-        throw new Error(copyRes.message);
+        await window.electronAPI.showDialog({
+          type: "error",
+          title: "Error",
+          message: copyRes.message,
+        });
       }
     } catch (error) {
-      console.error(error);
       setStatus(`Error: ${error.message}`);
     } finally {
       setIsProcessing(false);

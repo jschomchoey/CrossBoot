@@ -75,7 +75,28 @@ async function getAllFiles(dir) {
   return results;
 }
 
-app.whenReady().then(() => {
+// Cleanup leftover temp directories
+async function cleanupLeftovers() {
+  const tempBase = os.tmpdir();
+  try {
+    const files = await fs.readdir(tempBase);
+    const targets = files.filter((name) => name.startsWith("crossboot-"));
+
+    for (const dir of targets) {
+      const fullPath = path.join(tempBase, dir);
+      console.log(`Cleaning leftover: ${fullPath}`);
+      await fs.rm(fullPath, { recursive: true, force: true }).catch(() => {});
+    }
+  } catch (error) {
+    console.error("Cleanup Error:", error);
+  }
+}
+
+app.setName("CrossBoot");
+
+app.whenReady().then(async () => {
+  await cleanupLeftovers();
+
   ipcMain.handle("get-disks", async () => {
     try {
       const drives = await drivelist.list();
@@ -413,6 +434,44 @@ app.whenReady().then(() => {
       }
     }
   );
+
+  ipcMain.handle("show-dialog", async (event, { type, title, message }) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+
+    // เลือก path icon ให้ถูกตาม OS
+    let iconPath;
+    if (process.platform === "darwin") {
+      // macOS มักใช้ icon ของแอปอยู่แล้ว แต่ถ้าอยากบังคับให้ใช้รูปอื่น:
+      iconPath = path.join(
+        __dirname,
+        "..",
+        "src",
+        "assets",
+        "icon",
+        "icon_2.png"
+      );
+    } else {
+      iconPath = path.join(
+        __dirname,
+        "..",
+        "src",
+        "assets",
+        "icon",
+        "icon.png"
+      );
+    }
+
+    const result = await dialog.showMessageBox(win, {
+      type: type || "info", // 'info', 'error', 'question', 'warning'
+      title: title,
+      message: message,
+      buttons: ["OK"],
+      defaultId: 0,
+      icon: iconPath, // <-- บรรทัดนี้จะบังคับเปลี่ยน Icon
+    });
+
+    return result.response;
+  });
 
   // Set dock icon for macOS
   if (process.platform === "darwin") {

@@ -7,7 +7,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   formatUsb: (diskPath) => ipcRenderer.invoke("format-usb", diskPath),
   prepareIso: (isoPath) => ipcRenderer.invoke("prepare-iso", isoPath),
   copyToUsb: (data) => ipcRenderer.invoke("copy-to-usb", data),
-
+  showDialog: (options) => ipcRenderer.invoke("show-dialog", options),
   onProgress: (callback) =>
     ipcRenderer.on("process-progress", (_event, value) => callback(value)),
   // prevent memory leak
