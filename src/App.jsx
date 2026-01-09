@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import DriveSelector from "./components/DriveSelector";
+import windowsImage from "./assets/images/windows.jpg";
 import "./styles/main.scss";
 
 function App() {
@@ -8,11 +9,13 @@ function App() {
   const [isoPath, setIsoPath] = useState("");
   const [isoName, setIsoName] = useState("");
   const [isoSize, setIsoSize] = useState("");
+  const [bypassRequirements, setBypassRequirements] = useState(false);
 
   const [status, setStatus] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentFile, setCurrentFile] = useState("");
   const [totalProgress, setTotalProgress] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
   const hasSplitRef = useRef(false);
 
   useEffect(() => {
@@ -77,6 +80,40 @@ function App() {
     }
   };
 
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      const file = files[0];
+      if (file.name.toLowerCase().endsWith(".iso")) {
+        // Get file stats via Electron API
+        const result = await window.electronAPI.getFileInfo(file.path);
+        if (result) {
+          setIsoPath(result.path);
+          setIsoName(result.name || "");
+          setIsoSize(result.size || "");
+        }
+      } else {
+        alert("Please select an ISO file");
+      }
+    }
+  };
+
   const handleStart = async () => {
     if (!selectedDisk) return alert("Select USB");
     if (!isoPath) return alert("Select ISO");
@@ -112,6 +149,7 @@ function App() {
         usbDevice: selectedDisk,
         isoAction: isoRes.action,
         tempDir: isoRes.tempDir,
+        bypassRequirements,
       });
 
       if (copyRes.success) {
@@ -133,16 +171,44 @@ function App() {
   return (
     <div className="safe-margin">
       <div className="app-wrapper">
-        <div>
-          <button onClick={handleSelectIso}>Select ISO</button>
+        <div
+          className={`iso-drop-zone ${isDragging ? "dragging" : ""} ${
+            isoPath ? "has-file" : ""
+          }`}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          onClick={handleSelectIso}
+        >
           {isoPath ? (
-            <div>
-              <p>File: {isoName || isoPath}</p>
-              {isoSize && <p>Size: {isoSize}</p>}
-              <p className="text-small">Path: {isoPath}</p>
+            <div className="iso-info">
+              <img className="iso-image" src={windowsImage} alt="" />
+              <div>
+                <p className="iso-name">{isoName || isoPath}</p>
+                {isoSize && <p className="iso-size">{isoSize}</p>}
+                {/* <p className="iso-path">{isoPath}</p> */}
+              </div>
             </div>
           ) : (
-            <span>No ISO Selected</span>
+            <div className="iso-placeholder">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="icon icon-tabler icons-tabler-outline icon-tabler-plus"
+              >
+                <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+                <path d="M12 5l0 14" />
+                <path d="M5 12l14 0" />
+              </svg>
+              <p>Select an ISO file or drag it here</p>
+            </div>
           )}
         </div>
         <div className="destination-disk">
@@ -164,6 +230,9 @@ function App() {
               type="checkbox"
               name="advancedOption"
               id="bypass-requirements"
+              checked={bypassRequirements}
+              onChange={(e) => setBypassRequirements(e.target.checked)}
+              disabled={isProcessing}
             />
             <label htmlFor="bypass-requirements">
               Bypass Windows 11 Requirements

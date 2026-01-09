@@ -1,16 +1,20 @@
 .safe-margin {
-    padding: 1rem;
+    padding: 1.5rem;
     display: flex;
     justify-content: center;
 
     .app-wrapper {
         width: 100%;
 
+
+
         .destination-disk {
             position: relative;
             margin-bottom: 1rem;
+            min-height: 135px;
 
             .destination-disk-wrapper {
+                min-height: 135px;
                 border: 1px solid #e8e8e8;
                 border-radius: 1rem;
                 padding: 1rem;

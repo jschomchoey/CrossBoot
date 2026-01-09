@@ -9,6 +9,7 @@
 @import 'components/Checkbox';
 @import 'components/Button';
 @import 'components/Progress';
+@import 'components/DropZone';
 
 // Layout
 @import 'layout/App';
@@ -38,5 +39,27 @@ body {
 
     &-5 {
         margin-bottom: 3rem;
+    }
+}
+
+.mt {
+    &-1 {
+        margin-top: 0.25rem;
+    }
+
+    &-2 {
+        margin-top: 0.5rem;
+    }
+
+    &-3 {
+        margin-top: 1rem;
+    }
+
+    &-4 {
+        margin-top: 1.5rem;
+    }
+
+    &-5 {
+        margin-top: 3rem;
     }
 }

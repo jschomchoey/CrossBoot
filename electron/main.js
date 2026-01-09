@@ -18,7 +18,7 @@ const WIMLIB_PATH = path.join(__dirname, "wimlib", "wimlib-imagex");
 const createWindow = () => {
   const win = new BrowserWindow({
     width: 600,
-    height: 500,
+    height: 550,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -105,6 +105,25 @@ app.whenReady().then(() => {
     } catch (error) {
       // Fallback to just return path if stat fails
       return filePath;
+    }
+  });
+
+  ipcMain.handle("get-file-info", async (event, filePath) => {
+    try {
+      const stats = await fs.stat(filePath);
+      const sizeInBytes = stats.size;
+      const sizeInGB = (sizeInBytes / (1024 * 1024 * 1024)).toFixed(2);
+      const fileName = path.basename(filePath);
+
+      return {
+        path: filePath,
+        name: fileName,
+        size: `${sizeInGB} GB`,
+        sizeBytes: sizeInBytes,
+      };
+    } catch (error) {
+      console.error("Error getting file info:", error);
+      return null;
     }
   });
 
@@ -230,7 +249,10 @@ app.whenReady().then(() => {
 
   ipcMain.handle(
     "copy-to-usb",
-    async (event, { isoMountPoint, usbDevice, isoAction, tempDir }) => {
+    async (
+      event,
+      { isoMountPoint, usbDevice, isoAction, tempDir, bypassRequirements }
+    ) => {
       const webContents = event.sender;
 
       try {
@@ -308,6 +330,45 @@ app.whenReady().then(() => {
 
             readStream.pipe(writeStream);
           });
+        }
+
+        // Add Windows 11 Bypass if enabled
+        if (bypassRequirements) {
+          try {
+            // Create autounattend.xml to bypass TPM, Secure Boot, and RAM requirements
+            const autounattendContent = `<?xml version="1.0" encoding="utf-8"?>
+              <unattend xmlns="urn:schemas-microsoft-com:unattend">
+                  <settings pass="windowsPE">
+                      <component name="Microsoft-Windows-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+                          <UserData>
+                              <ProductKey>
+                                  <Key></Key>
+                              </ProductKey>
+                          </UserData>
+                          <RunSynchronous>
+                              <RunSynchronousCommand wcm:action="add">
+                                  <Order>1</Order>
+                                  <Path>reg add HKLM\\SYSTEM\\Setup\\LabConfig /v BypassTPMCheck /t REG_DWORD /d 1 /f</Path>
+                              </RunSynchronousCommand>
+                              <RunSynchronousCommand wcm:action="add">
+                                  <Order>2</Order>
+                                  <Path>reg add HKLM\\SYSTEM\\Setup\\LabConfig /v BypassSecureBootCheck /t REG_DWORD /d 1 /f</Path>
+                              </RunSynchronousCommand>
+                              <RunSynchronousCommand wcm:action="add">
+                                  <Order>3</Order>
+                                  <Path>reg add HKLM\\SYSTEM\\Setup\\LabConfig /v BypassRAMCheck /t REG_DWORD /d 1 /f</Path>
+                              </RunSynchronousCommand>
+                          </RunSynchronous>
+                      </component>
+                  </settings>
+              </unattend>`;
+
+            const autounattendPath = path.join(destRoot, "autounattend.xml");
+            await fs.writeFile(autounattendPath, autounattendContent, "utf8");
+            console.log("Created autounattend.xml for Windows 11 bypass");
+          } catch (error) {
+            console.error("Failed to create bypass files:", error);
+          }
         }
 
         // Cleanup

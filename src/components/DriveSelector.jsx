@@ -53,9 +53,9 @@ function DriveSelector({ drives, selectedDrive, onSelectDrive }) {
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
             class="icon icon-tabler icons-tabler-outline icon-tabler-selector"
           >
             <path stroke="none" d="M0 0h24v24H0z" fill="none" />
@@ -70,10 +70,10 @@ function DriveSelector({ drives, selectedDrive, onSelectDrive }) {
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            class="icon icon-tabler icons-tabler-outline icon-tabler-selector"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="icon icon-tabler icons-tabler-outline icon-tabler-selector"
           >
             <path stroke="none" d="M0 0h24v24H0z" fill="none" />
             <path d="M8 9l4 -4l4 4" />
@@ -91,7 +91,9 @@ function DriveSelector({ drives, selectedDrive, onSelectDrive }) {
         onClick={() => setIsOpen(!isOpen)}
       >
         {drives.length === 0 ? (
-          <p>No USB Found</p>
+          <div className="nodevice">
+            <p>No USB Drive Found</p>
+          </div>
         ) : selectedData ? (
           <SelectedDisplay drive={selectedData} />
         ) : (
