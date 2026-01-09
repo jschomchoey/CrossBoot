@@ -1,16 +1,87 @@
-# React + Vite
+# CrossBoot
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A simple tool for creating Windows bootable USB drives on macOS.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- Clean and easy-to-use interface
+- Automatic WIM file splitting for FAT32 compatibility (handles files over 4GB)
+- Supports both Legacy BIOS and UEFI boot modes
+- Secure Boot compatible
+- Drag-and-drop ISO support
+- Real-time progress tracking
+- Option to bypass Windows 11 hardware requirements
 
-## React Compiler
+## Requirements
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- macOS (Apple Silicon only)
+- Administrator privileges (required for disk operations)
+- Windows ISO file
+- USB drive (8GB or larger recommended)
 
-## Expanding the ESLint configuration
+## Installation
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Download the latest release from the releases page and install the application.
+
+## Usage
+
+1. Insert your USB drive
+2. Select the target USB drive from the dropdown
+3. Choose your Windows ISO file (click to browse or drag-and-drop)
+4. Optional: Enable "Bypass Windows 11 Requirements" if needed
+5. Click "Create Bootable USB" and confirm
+6. Wait for the process to complete
+
+The tool will automatically format your USB drive to FAT32 and copy all necessary files. Large WIM files will be split automatically to ensure compatibility.
+
+## Development
+
+### Prerequisites
+
+- Node.js (v18 or higher)
+- npm or yarn
+
+### Setup
+
+```bash
+# Install dependencies
+npm install
+
+# Run in development mode
+npm start
+
+# Build for production
+npm run build
+
+# Package the application
+npm package
+```
+
+### Tech Stack
+
+- Electron - Desktop application framework
+- React - UI library
+- Vite - Build tool and development server
+- SCSS - Styling
+- wimlib - WIM file manipulation
+
+### Project Structure
+
+```
+src/
+  components/     - React components
+  styles/        - SCSS stylesheets
+  assets/        - Images and icons
+electron/
+  main.js        - Electron main process
+  preload.js     - Preload script for IPC
+  wimlib/        - wimlib-imagex binary
+```
+
+## Acknowledgments
+
+This project uses [wimlib](https://wimlib.net/) for WIM file operations. Special thanks to the wimlib developers for their excellent tool.
+
+## License
+
+See LICENSE file for details.
