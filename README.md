@@ -25,6 +25,8 @@ A simple tool for creating Windows bootable USB drives on macOS.
 
 Download the latest release from the releases page and install the application.
 
+**Note:** This app is not signed with an Apple Developer certificate. When running it for the first time, macOS Gatekeeper will block it. You'll need to allow the app in **System Settings > Privacy & Security** before you can run it.
+
 ## Usage
 
 1. Insert your USB drive
