@@ -2,6 +2,8 @@
 
 A simple tool for creating Windows bootable USB drives on macOS.
 
+![CrossBoot Screenshot](src/assets/images/screenshot.png)
+
 ## Features
 
 - Clean and easy-to-use interface
