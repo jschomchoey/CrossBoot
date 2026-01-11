@@ -34,7 +34,7 @@ const getIconPath = () => {
 const createWindow = () => {
   const win = new BrowserWindow({
     width: 600,
-    height: 550,
+    height: 570,
     resizable: false,
     icon: getIconPath(),
     webPreferences: {
@@ -299,7 +299,14 @@ app.whenReady().then(async () => {
     "copy-to-usb",
     async (
       event,
-      { isoMountPoint, usbDevice, isoAction, tempDir, bypassRequirements }
+      {
+        isoMountPoint,
+        usbDevice,
+        isoAction,
+        tempDir,
+        bypassRequirements,
+        bypassOnlineAccount,
+      }
     ) => {
       const webContents = event.sender;
 
@@ -380,50 +387,71 @@ app.whenReady().then(async () => {
           });
         }
 
-        // Add Windows 11 Bypass if enabled
-        if (bypassRequirements) {
+        // Add autounattend.xml for bypass options
+        if (bypassRequirements || bypassOnlineAccount) {
           try {
-            // Create autounattend.xml to bypass TPM, Secure Boot, and RAM requirements
-            const autounattendContent = `<?xml version="1.0" encoding="utf-8"?>
-              <unattend xmlns="urn:schemas-microsoft-com:unattend">
-                  <settings pass="windowsPE">
-                      <component name="Microsoft-Windows-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
-                          <UserData>
-                              <ProductKey>
-                                  <Key></Key>
-                              </ProductKey>
-                          </UserData>
-                          <RunSynchronous>
-                            <RunSynchronousCommand wcm:action="add">
-                                <Order>1</Order>
-                                <Path>reg add HKLM\SYSTEM\Setup\LabConfig /v BypassTPMCheck /t REG_DWORD /d 1 /f</Path>
-                            </RunSynchronousCommand>
-                            <RunSynchronousCommand wcm:action="add">
-                                <Order>2</Order>
-                                <Path>reg add HKLM\SYSTEM\Setup\LabConfig /v BypassSecureBootCheck /t REG_DWORD /d 1 /f</Path>
-                            </RunSynchronousCommand>
-                            <RunSynchronousCommand wcm:action="add">
-                                <Order>3</Order>
-                                <Path>reg add HKLM\SYSTEM\Setup\LabConfig /v BypassRAMCheck /t REG_DWORD /d 1 /f</Path>
-                            </RunSynchronousCommand>
-                            <RunSynchronousCommand wcm:action="add">
-                                <Order>4</Order>
-                                <Path>reg add HKLM\SYSTEM\Setup\LabConfig /v BypassCPUCheck /t REG_DWORD /d 1 /f</Path>
-                            </RunSynchronousCommand>
-                            <RunSynchronousCommand wcm:action="add">
-                                <Order>5</Order>
-                                <Path>reg add HKLM\SYSTEM\Setup\LabConfig /v BypassStorageCheck /t REG_DWORD /d 1 /f</Path>
-                            </RunSynchronousCommand>
-                        </RunSynchronous>
-                      </component>
-                  </settings>
-              </unattend>`;
+            let autounattendContent = `<?xml version="1.0" encoding="utf-8"?>
+<unattend xmlns="urn:schemas-microsoft-com:unattend">`;
+
+            // Add Windows 11 Requirements Bypass (windowsPE pass)
+            if (bypassRequirements) {
+              autounattendContent += `
+    <settings pass="windowsPE">
+        <component name="Microsoft-Windows-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+            <UserData>
+                <ProductKey>
+                    <Key></Key>
+                </ProductKey>
+            </UserData>
+            <RunSynchronous>
+                <RunSynchronousCommand wcm:action="add">
+                    <Order>1</Order>
+                    <Path>reg add HKLM\\SYSTEM\\Setup\\LabConfig /v BypassTPMCheck /t REG_DWORD /d 1 /f</Path>
+                </RunSynchronousCommand>
+                <RunSynchronousCommand wcm:action="add">
+                    <Order>2</Order>
+                    <Path>reg add HKLM\\SYSTEM\\Setup\\LabConfig /v BypassSecureBootCheck /t REG_DWORD /d 1 /f</Path>
+                </RunSynchronousCommand>
+                <RunSynchronousCommand wcm:action="add">
+                    <Order>3</Order>
+                    <Path>reg add HKLM\\SYSTEM\\Setup\\LabConfig /v BypassRAMCheck /t REG_DWORD /d 1 /f</Path>
+                </RunSynchronousCommand>
+                <RunSynchronousCommand wcm:action="add">
+                    <Order>4</Order>
+                    <Path>reg add HKLM\\SYSTEM\\Setup\\LabConfig /v BypassCPUCheck /t REG_DWORD /d 1 /f</Path>
+                </RunSynchronousCommand>
+                <RunSynchronousCommand wcm:action="add">
+                    <Order>5</Order>
+                    <Path>reg add HKLM\\SYSTEM\\Setup\\LabConfig /v BypassStorageCheck /t REG_DWORD /d 1 /f</Path>
+                </RunSynchronousCommand>
+            </RunSynchronous>
+        </component>
+    </settings>`;
+            }
+
+            // Add Microsoft Online Account Bypass (specialize pass)
+            if (bypassOnlineAccount) {
+              autounattendContent += `
+    <settings pass="specialize">
+        <component name="Microsoft-Windows-Deployment" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+            <RunSynchronous>
+                <RunSynchronousCommand wcm:action="add">
+                    <Order>1</Order>
+                    <Path>reg add "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\OOBE" /v BypassNRO /t REG_DWORD /d 1 /f</Path>
+                </RunSynchronousCommand>
+            </RunSynchronous>
+        </component>
+    </settings>`;
+            }
+
+            autounattendContent += `
+</unattend>`;
 
             const autounattendPath = path.join(destRoot, "autounattend.xml");
             await fs.writeFile(autounattendPath, autounattendContent, "utf8");
-            console.log("Created autounattend.xml for Windows 11 bypass");
+            console.log("Created autounattend.xml with bypass options");
           } catch (error) {
-            console.error("Failed to create bypass files:", error);
+            console.error("Failed to create autounattend.xml:", error);
           }
         }
 

@@ -10,6 +10,7 @@ function App() {
   const [isoName, setIsoName] = useState("");
   const [isoSize, setIsoSize] = useState("");
   const [bypassRequirements, setBypassRequirements] = useState(false);
+  const [bypassOnlineAccount, setBypassOnlineAccount] = useState(false);
 
   const [status, setStatus] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
@@ -150,6 +151,7 @@ function App() {
         isoAction: isoRes.action,
         tempDir: isoRes.tempDir,
         bypassRequirements,
+        bypassOnlineAccount,
       });
 
       if (copyRes.success) {
@@ -253,14 +255,27 @@ function App() {
           <div className="custom-checkbox">
             <input
               type="checkbox"
-              name="advancedOption"
+              name="bypassRequirements"
               id="bypass-requirements"
               checked={bypassRequirements}
               onChange={(e) => setBypassRequirements(e.target.checked)}
               disabled={isProcessing}
             />
             <label htmlFor="bypass-requirements">
-              Bypass Windows 11 Requirements
+              Bypass Windows 11 Requirements.
+            </label>
+          </div>
+          <div className="custom-checkbox">
+            <input
+              type="checkbox"
+              name="bypassOnlineAccount"
+              id="bypass-online-account"
+              checked={bypassOnlineAccount}
+              onChange={(e) => setBypassOnlineAccount(e.target.checked)}
+              disabled={isProcessing}
+            />
+            <label htmlFor="bypass-online-account">
+              Bypass Online Account.
             </label>
           </div>
         </div>
