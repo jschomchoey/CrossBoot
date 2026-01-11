@@ -285,7 +285,7 @@ function App() {
           onClick={handleStart}
           disabled={isProcessing || !isoPath || !selectedDisk}
         >
-          Start
+          Create Bootable Drive
         </button>
         <div className="progress">
           <div className="progress-bar mb-2">
