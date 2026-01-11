@@ -30,6 +30,21 @@
                         cursor: pointer;
                         width: 1.125rem;
                         height: 1.125rem;
+                        transition: transform 0.5s ease;
+
+                        &.rotating {
+                            animation: rotate 0.5s ease;
+                        }
+                    }
+
+                    @keyframes rotate {
+                        from {
+                            transform: rotate(0deg);
+                        }
+
+                        to {
+                            transform: rotate(360deg);
+                        }
                     }
                 }
             }

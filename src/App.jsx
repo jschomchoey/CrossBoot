@@ -17,6 +17,7 @@ function App() {
   const [currentFile, setCurrentFile] = useState("");
   const [totalProgress, setTotalProgress] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const [isRotating, setIsRotating] = useState(false);
   const hasSplitRef = useRef(false);
 
   useEffect(() => {
@@ -57,12 +58,15 @@ function App() {
   }, []);
 
   const handleScan = async () => {
+    setIsRotating(true);
     const list = await window.electronAPI.getDisks();
     setDrives(list);
 
     if (list.length > 0) {
       setSelectedDisk(list[0].device);
     }
+
+    setTimeout(() => setIsRotating(false), 500);
   };
 
   const handleSelectIso = async () => {
@@ -234,7 +238,9 @@ function App() {
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                className="icon icon-tabler icons-tabler-outline icon-tabler-reload"
+                className={`icon icon-tabler icons-tabler-outline icon-tabler-reload ${
+                  isRotating ? "rotating" : ""
+                }`}
                 onClick={handleScan}
               >
                 <path stroke="none" d="M0 0h24v24H0z" fill="none" />
