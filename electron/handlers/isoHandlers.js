@@ -53,13 +53,80 @@ export function registerIsoHandlers() {
         const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "crossboot-"));
         const destPath = path.join(tempDir, "install.swm");
 
-        return new Promise((resolve, reject) => {
+        return new Promise(async (resolve, reject) => {
+          console.log("\n" + "=".repeat(60));
+          console.log("📀 STARTING WIM SPLIT OPERATION");
+          console.log("=".repeat(60));
+
+          // Check if wimlib binary exists
+          try {
+            await fs.access(WIMLIB_PATH);
+            console.log(`✅ Wimlib binary found at: ${WIMLIB_PATH}`);
+          } catch (err) {
+            console.error(`❌ Wimlib binary NOT found at: ${WIMLIB_PATH}`);
+            console.error(`Error: ${err.message}`);
+            reject(
+              new Error(
+                `Wimlib binary not found at ${WIMLIB_PATH}. Error: ${err.message}`
+              )
+            );
+            return;
+          }
+
+          // Force set executable permission and remove quarantine attribute
+          try {
+            console.log("⚙️  Re-checking and fixing permissions...");
+            const { stdout: beforePerms } = await execPromise(
+              `ls -la "${WIMLIB_PATH}"`
+            );
+            console.log(`📋 Permissions before: ${beforePerms.trim()}`);
+
+            await execPromise(`chmod +x "${WIMLIB_PATH}"`);
+            console.log("✅ chmod +x applied");
+
+            // Remove macOS quarantine attribute that blocks execution
+            await execPromise(
+              `xattr -d com.apple.quarantine "${WIMLIB_PATH}" 2>/dev/null || true`
+            );
+            console.log("✅ Quarantine attribute removed");
+
+            const { stdout: afterPerms } = await execPromise(
+              `ls -la "${WIMLIB_PATH}"`
+            );
+            console.log(`📋 Permissions after: ${afterPerms.trim()}`);
+          } catch (err) {
+            console.warn(
+              `⚠️  Warning: Could not modify wimlib permissions: ${err.message}`
+            );
+          }
+
+          console.log(`🚀 Spawning wimlib process...`);
+          console.log(
+            `   Command: wimlib-imagex split "${wimPath}" "${destPath}" 3800`
+          );
+
           const splitProcess = spawn(WIMLIB_PATH, [
             "split",
             wimPath,
             destPath,
             "3800",
           ]);
+
+          console.log(
+            `✅ Process spawned with PID: ${splitProcess.pid || "unknown"}`
+          );
+
+          // Handle process spawn error
+          splitProcess.on("error", (err) => {
+            console.error("❌ SPAWN ERROR:", err.message);
+            console.error("Error code:", err.code);
+            console.error("Error stack:", err.stack);
+            reject(
+              new Error(
+                `Failed to spawn wimlib process: ${err.message}. Path: ${WIMLIB_PATH}`
+              )
+            );
+          });
 
           // Capture output from wimlib
           splitProcess.stdout.on("data", (data) => {
@@ -76,12 +143,16 @@ export function registerIsoHandlers() {
           });
 
           splitProcess.stderr.on("data", (data) => {
-            console.error(`Wimlib Error: ${data}`);
+            console.error(`⚠️  Wimlib STDERR: ${data}`);
           });
 
           // When finished
           splitProcess.on("close", (code) => {
+            console.log(`\n🏁 Wimlib process finished with code: ${code}`);
+            console.log("=".repeat(60) + "\n");
+
             if (code === 0) {
+              console.log("✅ Split completed successfully!");
               resolve({
                 success: true,
                 action: "split",
@@ -90,7 +161,13 @@ export function registerIsoHandlers() {
                 message: "Split complete",
               });
             } else {
-              reject(new Error(`Wimlib exited with code ${code}`));
+              console.error(`❌ Wimlib failed with exit code: ${code}`);
+              console.error(`Binary path: ${WIMLIB_PATH}`);
+              reject(
+                new Error(
+                  `Wimlib exited with code ${code}. Binary path: ${WIMLIB_PATH}`
+                )
+              );
             }
           });
         });
