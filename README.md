@@ -12,7 +12,7 @@ A simple tool for creating Windows bootable USB drives on macOS.
 - Secure Boot compatible
 - Drag-and-drop ISO support
 - Real-time progress tracking
-- Option to bypass Windows 11 hardware requirements
+- Option to bypass Windows 11 hardware requirements and Online Account
 
 ## Requirements
 
