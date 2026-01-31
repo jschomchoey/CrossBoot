@@ -123,7 +123,7 @@ actor DiskManager {
         }
         
         let command = "diskutil eraseDisk MS-DOS \"WINDOWS\" MBR \"\(device)\""
-        try await ShellHelper.run(command, asAdmin: false)
+        _ = try await ShellHelper.run(command, asAdmin: false)
     }
     
     /// Get mount point for a device
