@@ -150,25 +150,32 @@ struct NativeButton: NSViewRepresentable {
         }
     }
 }
-// MARK: - Native macOS Progress Indicator
 
-struct NativeProgressBar: NSViewRepresentable {
+// MARK: - Custom Progress Bar to avoid 0% artifact
+
+struct CustomProgressBar: View {
     var value: Double
-    var maxValue: Double
+    var total: Double
+    var height: CGFloat = 6
     
-    func makeNSView(context: Context) -> NSProgressIndicator {
-        let indicator = NSProgressIndicator()
-        indicator.style = .bar
-        indicator.isIndeterminate = false
-        indicator.minValue = 0
-        indicator.maxValue = maxValue
-        indicator.controlSize = .regular
-        return indicator
-    }
-    
-    func updateNSView(_ nsView: NSProgressIndicator, context: Context) {
-        nsView.doubleValue = value
-        nsView.maxValue = maxValue
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack(alignment: .leading) {
+                // Track
+                Capsule()
+                    .fill(Color.secondary.opacity(0.3))
+                    .frame(height: height)
+                
+                // Fill
+                if value > 0 {
+                    Capsule()
+                        .fill(Color.accentColor)
+                        .frame(width: max(0, min(geometry.size.width * CGFloat(value / total), geometry.size.width)), height: height)
+                        .animation(.linear(duration: 0.2), value: value)
+                }
+            }
+        }
+        .frame(height: height)
     }
 }
 
@@ -179,8 +186,8 @@ struct ProgressSection: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            NativeProgressBar(value: state.progress, maxValue: 100)
-                .frame(height: 20)
+            CustomProgressBar(value: state.progress, total: 100)
+                .padding(.vertical, 4) // Add a little breathing room since we lost the default padding of ProgressView
             
             HStack {
                 Text("Status: \(state.stage.description)")
