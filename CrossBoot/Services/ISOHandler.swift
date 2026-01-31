@@ -104,6 +104,9 @@ actor ISOHandler {
         let bufferSize = 32 * 1024 * 1024 // 32MB buffer
         
         for file in filesToCopy {
+            // Check for cancellation at start of each file
+            try Task.checkCancellation()
+            
             // Determine destination path
             let relativePath: String
             if let tempDir = splitTempDir, file.path.hasPrefix(tempDir.path) {
@@ -144,6 +147,9 @@ actor ISOHandler {
             var buffer = [UInt8](repeating: 0, count: bufferSize)
             
             while inputStream.hasBytesAvailable {
+                // Check for cancellation during buffer reads
+                try Task.checkCancellation()
+                
                 let bytesRead = inputStream.read(&buffer, maxLength: bufferSize)
                 if bytesRead > 0 {
                     outputStream.write(buffer, maxLength: bytesRead)

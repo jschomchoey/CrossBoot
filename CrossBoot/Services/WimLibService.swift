@@ -24,45 +24,57 @@ actor WimLibService {
         
         let outputPath = tempDir.appendingPathComponent("install.swm").path
         
-        return try await withCheckedThrowingContinuation { continuation in
-            let process = Process()
-            let pipe = Pipe()
+        let process = Process()
+        let pipe = Pipe()
+        
+        process.executableURL = URL(fileURLWithPath: wimlibPath)
+        process.arguments = ["split", wimPath, outputPath, "3800"]
+        process.standardOutput = pipe
+        process.standardError = pipe
+        
+        pipe.fileHandleForReading.readabilityHandler = { handle in
+            let data = handle.availableData
+            guard !data.isEmpty, let output = String(data: data, encoding: .utf8) else { return }
             
-            process.executableURL = URL(fileURLWithPath: wimlibPath)
-            process.arguments = ["split", wimPath, outputPath, "3800"]
-            process.standardOutput = pipe
-            process.standardError = pipe
-            
-            pipe.fileHandleForReading.readabilityHandler = { handle in
-                let data = handle.availableData
-                guard !data.isEmpty, let output = String(data: data, encoding: .utf8) else { return }
-                
-                // Parse progress percentage from wimlib output
-                if let range = output.range(of: "(\\d+)%", options: .regularExpression),
-                   let percent = Int(output[range].dropLast()) {
-                    Task { @MainActor in
-                        onProgress(percent)
+            // Parse progress percentage from wimlib output
+            if let range = output.range(of: "(\\d+)%", options: .regularExpression),
+               let percent = Int(output[range].dropLast()) {
+                Task { @MainActor in
+                    onProgress(percent)
+                }
+            }
+        }
+        
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                process.terminationHandler = { proc in
+                    pipe.fileHandleForReading.readabilityHandler = nil
+                    
+                    if proc.terminationStatus == 0 {
+                        continuation.resume(returning: tempDir)
+                    } else if proc.terminationStatus == 15 || proc.terminationStatus == 9 {
+                        // SIGTERM or SIGKILL - cancelled
+                        try? FileManager.default.removeItem(at: tempDir)
+                        continuation.resume(throwing: CancellationError())
+                    } else {
+                        try? FileManager.default.removeItem(at: tempDir)
+                        continuation.resume(throwing: WimLibError.splitFailed(Int(proc.terminationStatus)))
                     }
                 }
-            }
-            
-            process.terminationHandler = { proc in
-                pipe.fileHandleForReading.readabilityHandler = nil
                 
-                if proc.terminationStatus == 0 {
-                    continuation.resume(returning: tempDir)
-                } else {
+                do {
+                    try process.run()
+                } catch {
                     try? FileManager.default.removeItem(at: tempDir)
-                    continuation.resume(throwing: WimLibError.splitFailed(Int(proc.terminationStatus)))
+                    continuation.resume(throwing: error)
                 }
             }
-            
-            do {
-                try process.run()
-            } catch {
-                try? FileManager.default.removeItem(at: tempDir)
-                continuation.resume(throwing: error)
+        } onCancel: {
+            // Terminate the process when task is cancelled
+            if process.isRunning {
+                process.terminate()
             }
+            try? FileManager.default.removeItem(at: tempDir)
         }
     }
 }

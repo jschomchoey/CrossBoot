@@ -3,6 +3,7 @@ import SwiftUI
 /// Main content view for CrossBoot app
 struct ContentView: View {
     @StateObject private var viewModel = CrossBootViewModel()
+    @State private var rotation: Double = 0
     
     var body: some View {
         VStack(spacing: 16) {
@@ -12,6 +13,7 @@ struct ContentView: View {
                 onSelect: { viewModel.selectISO() },
                 onDrop: { urls in viewModel.handleISODrop(urls) }
             )
+            .disabled(viewModel.processState.isProcessing)
             
             // Destination Disk Section
             VStack(alignment: .leading, spacing: 8) {
@@ -21,28 +23,34 @@ struct ContentView: View {
                     
                     Spacer()
                     
-                    Button(action: {
-                        Task { await viewModel.scanDrives() }
-                    }) {
-                        Image(systemName: "arrow.clockwise")
-                            .rotationEffect(.degrees(viewModel.isScanning ? 360 : 0))
-                            .animation(viewModel.isScanning ? .linear(duration: 0.8).repeatForever(autoreverses: false) : .default, value: viewModel.isScanning)
-                    }
+                    Button {
+                        rotation += 360
+
+                        Task {
+                               await viewModel.scanDrives()
+                        }
+                    } label: {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .rotationEffect(.degrees(rotation))
+                            .animation(.easeInOut(duration: 0.5), value: rotation) 
+                        }
                     .buttonStyle(.plain)
                     .disabled(viewModel.processState.isProcessing)
+
                 }
                 
                 DriveSelectorView(
                     drives: viewModel.drives,
                     selectedDrive: $viewModel.selectedDrive
                 )
+                .disabled(viewModel.processState.isProcessing)
             }
             .padding()
             .background(Color(NSColor.controlBackgroundColor))
             .cornerRadius(8)
             
             // Advanced Options
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text("Advanced Options")
                     .font(.headline)
                 
@@ -54,17 +62,29 @@ struct ContentView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             
-            // Create Button
-            NativeButton(
-                title: "Create Bootable Drive",
-                isEnabled: viewModel.canStart,
-                action: {
-                    if viewModel.confirmErase() {
-                        Task { await viewModel.createBootableUSB() }
+            // Create/Abort Button
+            if viewModel.processState.isProcessing {
+                NativeButton(
+                    title: "Abort",
+                    isEnabled: viewModel.processState.stage != .aborting,
+                    isDestructive: true,
+                    action: {
+                        viewModel.abortProcess()
                     }
-                }
-            )
-            .frame(height: 32)
+                )
+                .frame(height: 32)
+            } else {
+                NativeButton(
+                    title: "Create Bootable Drive",
+                    isEnabled: viewModel.canStart,
+                    action: {
+                        if viewModel.confirmErase() {
+                            viewModel.createBootableUSB()
+                        }
+                    }
+                )
+                .frame(height: 32)
+            }
             
             // Progress Section
             ProgressSection(state: viewModel.processState)
@@ -82,6 +102,7 @@ struct ContentView: View {
 struct NativeButton: NSViewRepresentable {
     var title: String
     var isEnabled: Bool
+    var isDestructive: Bool = false
     var action: () -> Void
     
     func makeNSView(context: Context) -> NSButton {
@@ -91,13 +112,26 @@ struct NativeButton: NSViewRepresentable {
         button.controlSize = .large
         button.target = context.coordinator
         button.action = #selector(Coordinator.buttonClicked)
-        button.keyEquivalent = "\r" // Enter key
+        
+        if !isDestructive {
+            button.keyEquivalent = "\r" // Enter key only for primary action
+        }
+        
         return button
     }
     
     func updateNSView(_ nsView: NSButton, context: Context) {
         nsView.title = title
         nsView.isEnabled = isEnabled
+        
+        // Apply destructive styling
+        if isDestructive {
+            nsView.contentTintColor = .systemRed
+            nsView.keyEquivalent = ""
+        } else {
+            nsView.contentTintColor = nil
+            nsView.keyEquivalent = "\r"
+        }
     }
     
     func makeCoordinator() -> Coordinator {

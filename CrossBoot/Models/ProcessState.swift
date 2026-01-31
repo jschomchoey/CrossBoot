@@ -7,7 +7,9 @@ enum ProcessStage: Equatable {
     case analyzing
     case splitting
     case copying
+    case aborting
     case done
+    case aborted
     case error(String)
     
     var description: String {
@@ -17,7 +19,9 @@ enum ProcessStage: Equatable {
         case .analyzing: return "Analyzing ISO..."
         case .splitting: return "Splitting WIM file..."
         case .copying: return "Copying files..."
+        case .aborting: return "Aborting..."
         case .done: return "Done. USB is ready."
+        case .aborted: return "Process aborted."
         case .error(let message): return "Error: \(message)"
         }
     }
@@ -31,7 +35,7 @@ struct ProcessState {
     
     var isProcessing: Bool {
         switch stage {
-        case .idle, .done, .error:
+        case .idle, .done, .aborted, .error:
             return false
         default:
             return true

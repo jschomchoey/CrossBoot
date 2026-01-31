@@ -7,7 +7,8 @@ struct ISOFile {
     let sizeBytes: Int64
     
     var sizeFormatted: String {
-        let gb = Double(sizeBytes) / (1024 * 1024 * 1024)
+        // Use decimal (1000) to match macOS Finder display
+        let gb = Double(sizeBytes) / (1000 * 1000 * 1000)
         return String(format: "%.2f GB", gb)
     }
     

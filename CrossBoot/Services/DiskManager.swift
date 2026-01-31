@@ -1,10 +1,53 @@
 import Foundation
+import DiskArbitration
 
 /// Manages USB drive detection and formatting
 actor DiskManager {
     static let shared = DiskManager()
     
+    private var diskSession: DASession?
+    private var onDiskChange: (() -> Void)?
+    
     private init() {}
+    
+    /// Start monitoring disk changes
+    func startMonitoring(onChange: @escaping () -> Void) {
+        onDiskChange = onChange
+        
+        Task.detached { [weak self] in
+            guard let session = DASessionCreate(kCFAllocatorDefault) else { return }
+            await self?.setSession(session)
+            
+            DASessionSetDispatchQueue(session, DispatchQueue.main)
+            
+            // Register for disk appeared events
+            DARegisterDiskAppearedCallback(session, nil, { disk, context in
+                guard let context = context else { return }
+                let manager = Unmanaged<DiskChangeHandler>.fromOpaque(context).takeUnretainedValue()
+                manager.handleChange()
+            }, Unmanaged.passUnretained(DiskChangeHandler.shared).toOpaque())
+            
+            // Register for disk disappeared events
+            DARegisterDiskDisappearedCallback(session, nil, { disk, context in
+                guard let context = context else { return }
+                let manager = Unmanaged<DiskChangeHandler>.fromOpaque(context).takeUnretainedValue()
+                manager.handleChange()
+            }, Unmanaged.passUnretained(DiskChangeHandler.shared).toOpaque())
+            
+            // Set the change handler
+            DiskChangeHandler.shared.setHandler(onChange)
+        }
+    }
+    
+    private func setSession(_ session: DASession) {
+        diskSession = session
+    }
+    
+    /// Stop monitoring disk changes
+    func stopMonitoring() {
+        diskSession = nil
+        onDiskChange = nil
+    }
     
     /// List all removable USB drives
     func listRemovableDrives() async -> [Drive] {
@@ -123,6 +166,26 @@ actor DiskManager {
         } catch {
             return nil
         }
+    }
+}
+
+/// Helper class for disk change callbacks (must be a class for Unmanaged)
+class DiskChangeHandler {
+    static let shared = DiskChangeHandler()
+    private var onChange: (() -> Void)?
+    private var debounceWorkItem: DispatchWorkItem?
+    
+    func setHandler(_ handler: @escaping () -> Void) {
+        onChange = handler
+    }
+    
+    func handleChange() {
+        // Debounce rapid changes
+        debounceWorkItem?.cancel()
+        debounceWorkItem = DispatchWorkItem { [weak self] in
+            self?.onChange?()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: debounceWorkItem!)
     }
 }
 

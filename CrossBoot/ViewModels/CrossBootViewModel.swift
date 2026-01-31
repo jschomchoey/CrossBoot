@@ -18,6 +18,24 @@ class CrossBootViewModel: ObservableObject {
     private let isoHandler = ISOHandler.shared
     private let wimLibService = WimLibService.shared
     
+    // MARK: - Task Management
+    private var currentTask: Task<Void, Never>?
+    
+    // MARK: - Initialization
+    
+    init() {
+        // Start monitoring for USB changes
+        Task {
+            await diskManager.startMonitoring { [weak self] in
+                Task { @MainActor in
+                    // Only refresh if not processing
+                    guard self?.processState.isProcessing == false else { return }
+                    await self?.scanDrives()
+                }
+            }
+        }
+    }
+    
     // MARK: - Drive Operations
     
     /// Scan for available USB drives
@@ -73,7 +91,28 @@ class CrossBootViewModel: ObservableObject {
     // MARK: - Main Process
     
     /// Create bootable USB drive
-    func createBootableUSB() async {
+    func createBootableUSB() {
+        currentTask = Task {
+            await performCreateBootableUSB()
+        }
+    }
+    
+    /// Abort the current process
+    func abortProcess() {
+        // Show aborting status immediately
+        processState.stage = .aborting
+        
+        currentTask?.cancel()
+        currentTask = nil
+        
+        Task {
+            await isoHandler.cleanup()
+            processState = ProcessState(stage: .aborted, progress: 0)
+        }
+    }
+    
+    /// Internal implementation of create bootable USB
+    private func performCreateBootableUSB() async {
         guard let drive = selectedDrive else {
             processState.stage = .error("No USB drive selected")
             return
@@ -92,6 +131,9 @@ class CrossBootViewModel: ObservableObject {
             // Step 1: Format USB
             processState = ProcessState(stage: .formatting, progress: 2)
             try await diskManager.formatDrive(drive.device)
+            
+            // Check for cancellation
+            try Task.checkCancellation()
             processState.progress = 5
             
             // Get USB mount point
@@ -105,6 +147,9 @@ class CrossBootViewModel: ObservableObject {
             
             // Check if WIM needs splitting
             let (needsSplit, wimPath) = await isoHandler.checkWIMSize(mountPoint!)
+            
+            // Check for cancellation
+            try Task.checkCancellation()
             
             // Step 3: Split WIM if needed
             if needsSplit, let wim = wimPath {
@@ -165,6 +210,9 @@ class CrossBootViewModel: ObservableObject {
                 style: .informational
             )
             
+        } catch is CancellationError {
+            // Task was cancelled, cleanup already handled in abortProcess()
+            return
         } catch {
             processState.stage = .error(error.localizedDescription)
             showAlert(
