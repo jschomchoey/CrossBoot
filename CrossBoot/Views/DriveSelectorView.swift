@@ -1,69 +1,37 @@
 import SwiftUI
 
-/// Dropdown selector for USB drives
+/// Dropdown selector for USB drives using native macOS Picker
 struct DriveSelectorView: View {
     let drives: [Drive]
     @Binding var selectedDrive: Drive?
     
+    /// Computed property for Picker selection binding
+    private var selection: Binding<String> {
+        Binding(
+            get: { selectedDrive?.id ?? "" },
+            set: { newId in
+                selectedDrive = drives.first { $0.id == newId }
+            }
+        )
+    }
+    
     var body: some View {
-        Menu {
+        Picker("", selection: selection) {
             if drives.isEmpty {
-                Text("No USB drives found")
-                    .foregroundColor(.secondary)
+                Text("No USB Drive Found")
+                    .tag("")
             } else {
+                Text("Select a drive...")
+                    .tag("")
+                
                 ForEach(drives) { drive in
-                    Button(action: {
-                        selectedDrive = drive
-                    }) {
-                        HStack {
-                            VStack(alignment: .leading) {
-                                Text(drive.name)
-                                Text("\(drive.sizeFormatted) · \(drive.device)")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            
-                            if drive.id == selectedDrive?.id {
-                                Spacer()
-                                Image(systemName: "checkmark")
-                            }
-                        }
-                    }
+                    Text("\(drive.name) (\(drive.sizeFormatted))")
+                        .tag(drive.id)
                 }
             }
-        } label: {
-            HStack {
-                if let drive = selectedDrive {
-                    Image(systemName: "externaldrive")
-                        .font(.title2)
-                    
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(drive.name)
-                            .font(.headline)
-                        Text(drive.sizeFormatted)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                } else {
-                    Image(systemName: "externaldrive.badge.questionmark")
-                        .font(.title2)
-                        .foregroundColor(.secondary)
-                    
-                    Text(drives.isEmpty ? "No USB Drive Found" : "Select a drive")
-                        .foregroundColor(.secondary)
-                }
-                
-                Spacer()
-                
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            .padding(12)
-            .background(Color(NSColor.textBackgroundColor))
-            .cornerRadius(8)
         }
-        .menuStyle(.borderlessButton)
+        .pickerStyle(.menu)
+        .labelsHidden()
     }
 }
 

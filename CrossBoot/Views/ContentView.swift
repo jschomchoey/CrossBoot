@@ -55,20 +55,16 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             
             // Create Button
-            Button(action: {
-                if viewModel.confirmErase() {
-                    Task { await viewModel.createBootableUSB() }
+            NativeButton(
+                title: "Create Bootable Drive",
+                isEnabled: viewModel.canStart,
+                action: {
+                    if viewModel.confirmErase() {
+                        Task { await viewModel.createBootableUSB() }
+                    }
                 }
-            }) {
-                HStack {
-                    // Image(systemName: "externaldrive.badge.plus")
-                    Text("Create Bootable Drive")
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
-            }
-            .buttonStyle(PrimaryButtonStyle())
-            .disabled(!viewModel.canStart)
+            )
+            .frame(height: 32)
             
             // Progress Section
             ProgressSection(state: viewModel.processState)
@@ -81,14 +77,64 @@ struct ContentView: View {
     }
 }
 
-// MARK: - Primary Button Style (macOS 11 compatible)
+// MARK: - Native macOS Button (macOS 11 compatible)
 
-struct PrimaryButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .foregroundColor(.white)
-            .background(Color.accentColor.opacity(configuration.isPressed ? 0.8 : 1.0))
-            .cornerRadius(8)
+struct NativeButton: NSViewRepresentable {
+    var title: String
+    var isEnabled: Bool
+    var action: () -> Void
+    
+    func makeNSView(context: Context) -> NSButton {
+        let button = NSButton()
+        button.title = title
+        button.bezelStyle = .rounded
+        button.controlSize = .large
+        button.target = context.coordinator
+        button.action = #selector(Coordinator.buttonClicked)
+        button.keyEquivalent = "\r" // Enter key
+        return button
+    }
+    
+    func updateNSView(_ nsView: NSButton, context: Context) {
+        nsView.title = title
+        nsView.isEnabled = isEnabled
+    }
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(action: action)
+    }
+    
+    class Coordinator: NSObject {
+        var action: () -> Void
+        
+        init(action: @escaping () -> Void) {
+            self.action = action
+        }
+        
+        @objc func buttonClicked() {
+            action()
+        }
+    }
+}
+// MARK: - Native macOS Progress Indicator
+
+struct NativeProgressBar: NSViewRepresentable {
+    var value: Double
+    var maxValue: Double
+    
+    func makeNSView(context: Context) -> NSProgressIndicator {
+        let indicator = NSProgressIndicator()
+        indicator.style = .bar
+        indicator.isIndeterminate = false
+        indicator.minValue = 0
+        indicator.maxValue = maxValue
+        indicator.controlSize = .regular
+        return indicator
+    }
+    
+    func updateNSView(_ nsView: NSProgressIndicator, context: Context) {
+        nsView.doubleValue = value
+        nsView.maxValue = maxValue
     }
 }
 
@@ -99,8 +145,8 @@ struct ProgressSection: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            ProgressView(value: state.progress, total: 100)
-                .progressViewStyle(.linear)
+            NativeProgressBar(value: state.progress, maxValue: 100)
+                .frame(height: 20)
             
             HStack {
                 Text("Status: \(state.stage.description)")
