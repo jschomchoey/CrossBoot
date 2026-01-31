@@ -35,7 +35,8 @@ actor DiskManager {
             }, Unmanaged.passUnretained(DiskChangeHandler.shared).toOpaque())
             
             // Set the change handler
-            DiskChangeHandler.shared.setHandler(onChange)
+            guard let self = self else { return }
+            DiskChangeHandler.shared.setHandler(onChange, owner: self)
         }
     }
     
@@ -172,20 +173,33 @@ actor DiskManager {
 /// Helper class for disk change callbacks (must be a class for Unmanaged)
 class DiskChangeHandler {
     static let shared = DiskChangeHandler()
+    private weak var handlerOwner: AnyObject?
     private var onChange: (() -> Void)?
     private var debounceWorkItem: DispatchWorkItem?
     
-    func setHandler(_ handler: @escaping () -> Void) {
+    func setHandler(_ handler: @escaping () -> Void, owner: AnyObject) {
+        handlerOwner = owner
         onChange = handler
     }
     
     func handleChange() {
+        guard handlerOwner != nil else {
+            onChange = nil
+            return
+        }
+        
         // Debounce rapid changes
         debounceWorkItem?.cancel()
         debounceWorkItem = DispatchWorkItem { [weak self] in
+            guard self?.handlerOwner != nil else { return }
             self?.onChange?()
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: debounceWorkItem!)
+    }
+    
+    func clearHandler() {
+        onChange = nil
+        handlerOwner = nil
     }
 }
 

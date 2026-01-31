@@ -51,7 +51,7 @@ struct ISODropZoneView: View {
                 // Empty State
                 VStack(spacing: 8) {
                     Image(systemName: "plus.circle")
-                        .font(.system(size: 32))
+                        .font(.system(size: 24))
                         .foregroundColor(.secondary)
                     
                     Text("Select an ISO file or drag it here")
@@ -59,7 +59,7 @@ struct ISODropZoneView: View {
                 }
             }
         }
-        .frame(height: 100)
+        .frame(height: 80)
         .contentShape(Rectangle())
         .onTapGesture(perform: onSelect)
         .onDrop(of: [.fileURL], isTargeted: $isTargeted) { providers in

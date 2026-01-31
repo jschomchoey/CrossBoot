@@ -146,7 +146,10 @@ class CrossBootViewModel: ObservableObject {
             mountPoint = try await isoHandler.mountISO(iso.url)
             
             // Check if WIM needs splitting
-            let (needsSplit, wimPath) = await isoHandler.checkWIMSize(mountPoint!)
+            guard let safeMountPoint = mountPoint else {
+                throw ISOError.mountFailed
+            }
+            let (needsSplit, wimPath) = await isoHandler.checkWIMSize(safeMountPoint)
             
             // Check for cancellation
             try Task.checkCancellation()
@@ -163,14 +166,22 @@ class CrossBootViewModel: ObservableObject {
                     }
                 }
                 
-                await isoHandler.setTempDirectory(splitTempDir!)
+                guard let tempDir = splitTempDir else {
+                    throw ISOError.copyFailed("Split temporary directory not found")
+                }
+                
+                await isoHandler.setTempDirectory(tempDir)
             }
             
             // Step 4: Copy files
             processState.stage = .copying
             
+            guard let sourceMount = mountPoint else {
+                throw ISOError.mountFailed
+            }
+            
             try await isoHandler.copyFilesToUSB(
-                from: mountPoint!,
+                from: sourceMount,
                 to: usbPath,
                 splitTempDir: splitTempDir,
                 skipInstallWim: hasSplit
