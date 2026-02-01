@@ -8,7 +8,7 @@ struct CrossBootApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .frame(width: 600, height: 500)
+                .frame(width: 500, height: 500)
         }
         .commands {
             CommandGroup(replacing: .newItem) { }
@@ -40,7 +40,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window.styleMask.remove(.fullScreen)
         
         // Set fixed size
-        window.setContentSize(NSSize(width: 600, height: 500))
+        window.setContentSize(NSSize(width: 500, height: 500))
         
         // Disable zoom button (maximize)
         window.standardWindowButton(.zoomButton)?.isEnabled = false
