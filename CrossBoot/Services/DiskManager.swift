@@ -1,7 +1,7 @@
 import Foundation
 import DiskArbitration
 
-/// Manages USB drive detection and formatting
+// Manages USB drive detection and formatting
 actor DiskManager {
     static let shared = DiskManager()
     
@@ -10,7 +10,7 @@ actor DiskManager {
     
     private init() {}
     
-    /// Start monitoring disk changes
+    // Start monitoring disk changes
     func startMonitoring(onChange: @escaping () -> Void) {
         onDiskChange = onChange
         
@@ -34,7 +34,6 @@ actor DiskManager {
                 manager.handleChange()
             }, Unmanaged.passUnretained(DiskChangeHandler.shared).toOpaque())
             
-            // Set the change handler
             guard let self = self else { return }
             DiskChangeHandler.shared.setHandler(onChange, owner: self)
         }
@@ -44,13 +43,13 @@ actor DiskManager {
         diskSession = session
     }
     
-    /// Stop monitoring disk changes
+    // Stop monitoring disk changes
     func stopMonitoring() {
         diskSession = nil
         onDiskChange = nil
     }
     
-    /// List all removable USB drives
+    // List all removable USB drives
     func listRemovableDrives() async -> [Drive] {
         do {
             let output = try await ShellHelper.run("diskutil list -plist external physical")
@@ -61,7 +60,7 @@ actor DiskManager {
         }
     }
     
-    /// Parse diskutil plist output to extract drives
+    // Parse diskutil plist output to extract drives
     private func parseDiskutilOutput(_ plistString: String) -> [Drive] {
         guard let data = plistString.data(using: .utf8),
               let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
@@ -74,7 +73,7 @@ actor DiskManager {
         for disk in allDisks {
             guard let deviceIdentifier = disk["DeviceIdentifier"] as? String else { continue }
             
-            // Get disk info for this device
+            // Get disk info
             if let info = getDiskInfo(deviceIdentifier) {
                 drives.append(info)
             }
@@ -83,7 +82,7 @@ actor DiskManager {
         return drives
     }
     
-    /// Get detailed info for a specific disk
+    // Get detailed info
     private func getDiskInfo(_ identifier: String) -> Drive? {
         let device = "/dev/\(identifier)"
         
@@ -94,7 +93,6 @@ actor DiskManager {
                 return nil
             }
             
-            // Check if it's removable and not internal
             let removable = plist["Removable"] as? Bool ?? false
             let ejectable = plist["Ejectable"] as? Bool ?? false
             let isInternal = plist["Internal"] as? Bool ?? true
@@ -115,9 +113,8 @@ actor DiskManager {
         }
     }
     
-    /// Format a drive to FAT32 with MBR scheme
+    // Format drive to FAT32 with MBR
     func formatDrive(_ device: String) async throws {
-        // Safety check - never format disk0 (system disk)
         guard !device.contains("disk0") else {
             throw DiskError.systemDiskProtection
         }
@@ -126,19 +123,16 @@ actor DiskManager {
         _ = try await ShellHelper.run(command, asAdmin: false)
     }
     
-    /// Get mount point for a device
+    // Get mount point
     func getMountPoint(_ device: String) async -> String? {
-        // Try multiple times as disk may take time to mount after formatting
         for attempt in 1...5 {
-            // Wait longer on each attempt
             try? await Task.sleep(nanoseconds: UInt64(attempt) * 1_000_000_000)
             
-            // Try to get mount point from main device
             if let mount = await getMountPointFromDevice(device) {
                 return mount
             }
             
-            // Also try the first partition (e.g., disk2s1)
+            // Also try the first partition
             let diskId = device.replacingOccurrences(of: "/dev/", with: "")
             let partitionDevice = "/dev/\(diskId)s1"
             if let mount = await getMountPointFromDevice(partitionDevice) {
@@ -151,7 +145,7 @@ actor DiskManager {
         return nil
     }
     
-    /// Helper to get mount point from a specific device
+    // Helper to get mount point from a specific device
     private func getMountPointFromDevice(_ device: String) async -> String? {
         do {
             let output = try await ShellHelper.run("diskutil info -plist \(device)")
@@ -170,7 +164,7 @@ actor DiskManager {
     }
 }
 
-/// Helper class for disk change callbacks (must be a class for Unmanaged)
+// Helper class for disk change callbacks
 class DiskChangeHandler {
     static let shared = DiskChangeHandler()
     private weak var handlerOwner: AnyObject?

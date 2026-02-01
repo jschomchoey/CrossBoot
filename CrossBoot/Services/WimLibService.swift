@@ -1,21 +1,17 @@
 import Foundation
 
-/// Handles WIM file splitting using wimlib-imagex
+// Handles WIM file splitting using wimlib-imagex
 actor WimLibService {
     static let shared = WimLibService()
     
     private init() {}
     
-    /// Get path to bundled wimlib-imagex binary
+    // Get path to bundled wimlib-imagex
     private var wimlibPath: String {
         Bundle.main.path(forResource: "wimlib-imagex", ofType: nil) ?? "/usr/local/bin/wimlib-imagex"
     }
     
-    /// Split a large WIM file into smaller SWM files
-    /// - Parameters:
-    ///   - wimPath: Path to the source install.wim
-    ///   - onProgress: Progress callback (0-100)
-    /// - Returns: URL to temp directory containing split files
+    // Split WIM file
     func splitWIM(_ wimPath: String, onProgress: @escaping (Int) -> Void) async throws -> URL {
         // Create temp directory
         let tempDir = FileManager.default.temporaryDirectory
@@ -70,7 +66,6 @@ actor WimLibService {
                 }
             }
         } onCancel: {
-            // Terminate the process when task is cancelled
             if process.isRunning {
                 process.terminate()
             }

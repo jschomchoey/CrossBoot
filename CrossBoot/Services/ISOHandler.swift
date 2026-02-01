@@ -1,6 +1,6 @@
 import Foundation
 
-/// Handles ISO mounting, file copying, and WIM operations
+// Handles ISO mounting, file copying, and WIM operations
 actor ISOHandler {
     static let shared = ISOHandler()
     
@@ -9,11 +9,10 @@ actor ISOHandler {
     
     private init() {}
     
-    /// Mount an ISO file and return the mount point
+    // Mount an ISO file and return the mount point
     func mountISO(_ isoURL: URL) async throws -> String {
         let output = try await ShellHelper.run("hdiutil mount -nobrowse \"\(isoURL.path)\"")
         
-        // Parse mount point from output
         guard let match = output.range(of: "/Volumes/.+", options: .regularExpression),
               !output[match].isEmpty else {
             throw ISOError.mountFailed
@@ -24,19 +23,18 @@ actor ISOHandler {
         return mountPoint
     }
     
-    /// Unmount the ISO
+    // Unmount the ISO
     func unmountISO() async {
         guard let mountPoint = currentMountPoint else { return }
         _ = try? await ShellHelper.run("hdiutil detach \"\(mountPoint)\" -force")
         currentMountPoint = nil
     }
     
-    /// Check if install.wim needs splitting (> 4GB for FAT32)
+    // Check > 4GB for FAT32
     func checkWIMSize(_ mountPoint: String) async -> (needsSplit: Bool, wimPath: String?) {
         let wimPath = "\(mountPoint)/sources/install.wim"
         
         guard FileManager.default.fileExists(atPath: wimPath) else {
-            // No install.wim (maybe .esd), no split needed
             return (false, nil)
         }
         
@@ -51,7 +49,7 @@ actor ISOHandler {
         }
     }
     
-    /// Get all files in the mounted ISO
+    // Get all files in the mounted ISO
     func getAllFiles(_ directory: String) throws -> [(path: String, size: Int64)] {
         var results: [(path: String, size: Int64)] = []
         let fileManager = FileManager.default
@@ -74,7 +72,7 @@ actor ISOHandler {
         return results
     }
     
-    /// Copy files to USB with progress tracking
+    // Copy files to USB
     func copyFilesToUSB(
         from mountPoint: String,
         to usbPath: String,
@@ -84,12 +82,10 @@ actor ISOHandler {
     ) async throws {
         var filesToCopy = try getAllFiles(mountPoint)
         
-        // Skip install.wim if we're using split files
         if skipInstallWim {
             filesToCopy = filesToCopy.filter { !$0.path.lowercased().hasSuffix("install.wim") }
         }
         
-        // Add split WIM files if present
         if let tempDir = splitTempDir {
             let swmFiles = try getAllFiles(tempDir.path)
             for swm in swmFiles {
@@ -104,13 +100,10 @@ actor ISOHandler {
         let bufferSize = 32 * 1024 * 1024 // 32MB buffer
         
         for file in filesToCopy {
-            // Check for cancellation at start of each file
             try Task.checkCancellation()
             
-            // Determine destination path
             let relativePath: String
             if let tempDir = splitTempDir, file.path.hasPrefix(tempDir.path) {
-                // SWM files go to sources/
                 let fileName = (file.path as NSString).lastPathComponent
                 relativePath = "sources/\(fileName)"
             } else {
@@ -120,17 +113,14 @@ actor ISOHandler {
             let destPath = (usbPath as NSString).appendingPathComponent(relativePath)
             let destDir = (destPath as NSString).deletingLastPathComponent
             
-            // Create directory if needed
             try fileManager.createDirectory(atPath: destDir, withIntermediateDirectories: true)
             
-            // Copy with progress tracking
             let fileName = (file.path as NSString).lastPathComponent
             
             guard let inputStream = InputStream(fileAtPath: file.path) else {
                 throw ISOError.copyFailed("Cannot open \(fileName)")
             }
             
-            // Remove existing file if present
             try? fileManager.removeItem(atPath: destPath)
             
             guard let outputStream = OutputStream(toFileAtPath: destPath, append: false) else {
@@ -147,7 +137,6 @@ actor ISOHandler {
             var buffer = [UInt8](repeating: 0, count: bufferSize)
             
             while inputStream.hasBytesAvailable {
-                // Check for cancellation during buffer reads
                 try Task.checkCancellation()
                 
                 let bytesRead = inputStream.read(&buffer, maxLength: bufferSize)
@@ -234,7 +223,7 @@ actor ISOHandler {
         try content.write(toFile: autounattendPath, atomically: true, encoding: .utf8)
     }
     
-    /// Cleanup temp directory
+    // Cleanup temp directory
     func cleanup() async {
         await unmountISO()
         

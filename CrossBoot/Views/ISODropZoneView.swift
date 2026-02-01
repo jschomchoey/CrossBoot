@@ -1,7 +1,7 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Drop zone for selecting ISO files
+/// Drop zone
 struct ISODropZoneView: View {
     let isoFile: ISOFile?
     let onSelect: () -> Void
@@ -24,7 +24,6 @@ struct ISODropZoneView: View {
             if let iso = isoFile {
                 // ISO Selected State
                 HStack(spacing: 12) {
-                    // Windows Icon
                     Image(systemName: "opticaldisc")
                         .font(.system(size: 40))
                         .foregroundColor(.blue)
@@ -48,7 +47,6 @@ struct ISODropZoneView: View {
                 }
                 .padding()
             } else {
-                // Empty State
                 VStack(spacing: 8) {
                     Image(systemName: "plus.circle")
                         .font(.system(size: 24))

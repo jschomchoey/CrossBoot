@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Main content view for CrossBoot app
+/// Main content view
 struct ContentView: View {
     @StateObject private var viewModel = CrossBootViewModel()
     @State private var rotation: Double = 0
@@ -72,7 +72,6 @@ struct ContentView: View {
                         viewModel.abortProcess()
                     }
                 )
-                .frame(height: 32)
             } else {
                 NativeButton(
                     title: "Create Bootable Drive",
@@ -83,21 +82,19 @@ struct ContentView: View {
                         }
                     }
                 )
-                .frame(height: 32)
             }
             
             // Progress Section
             ProgressSection(state: viewModel.processState)
         }
         .padding(20)
-        .frame(minWidth: 400, maxWidth: 500)
         .onAppear {
             Task { await viewModel.scanDrives() }
         }
     }
 }
 
-// MARK: - Native macOS Button (macOS 11 compatible)
+// MARK: - Native macOS Button
 
 struct NativeButton: NSViewRepresentable {
     var title: String
@@ -114,7 +111,7 @@ struct NativeButton: NSViewRepresentable {
         button.action = #selector(Coordinator.buttonClicked)
         
         if !isDestructive {
-            button.keyEquivalent = "\r" // Enter key only for primary action
+            button.keyEquivalent = "\r"
         }
         
         return button
@@ -124,7 +121,6 @@ struct NativeButton: NSViewRepresentable {
         nsView.title = title
         nsView.isEnabled = isEnabled
         
-        // Apply destructive styling
         if isDestructive {
             nsView.contentTintColor = .systemRed
             nsView.keyEquivalent = ""
@@ -151,7 +147,7 @@ struct NativeButton: NSViewRepresentable {
     }
 }
 
-// MARK: - Custom Progress Bar to avoid 0% artifact
+// MARK: - Custom Progress Bar
 
 struct CustomProgressBar: View {
     var value: Double
@@ -187,7 +183,7 @@ struct ProgressSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             CustomProgressBar(value: state.progress, total: 100)
-                .padding(.vertical, 4) // Add a little breathing room since we lost the default padding of ProgressView
+                .padding(.vertical, 4)
             
             HStack {
                 Text("Status: \(state.stage.description)")

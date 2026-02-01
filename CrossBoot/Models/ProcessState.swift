@@ -1,6 +1,6 @@
 import Foundation
 
-/// Current stage of the bootable USB creation process
+// Current stage of the bootable USB creation process
 enum ProcessStage: Equatable {
     case idle
     case formatting
@@ -27,7 +27,7 @@ enum ProcessStage: Equatable {
     }
 }
 
-/// Tracks the state of the ongoing process
+// Tracks the state of the ongoing process
 struct ProcessState {
     var stage: ProcessStage = .idle
     var progress: Double = 0

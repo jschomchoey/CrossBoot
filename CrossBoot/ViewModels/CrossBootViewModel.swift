@@ -1,7 +1,6 @@
 import Foundation
 import AppKit
 
-/// Main ViewModel for CrossBoot app
 @MainActor
 class CrossBootViewModel: ObservableObject {
     // MARK: - Published Properties
@@ -24,11 +23,9 @@ class CrossBootViewModel: ObservableObject {
     // MARK: - Initialization
     
     init() {
-        // Start monitoring for USB changes
         Task {
             await diskManager.startMonitoring { [weak self] in
                 Task { @MainActor in
-                    // Only refresh if not processing
                     guard self?.processState.isProcessing == false else { return }
                     await self?.scanDrives()
                 }
@@ -38,17 +35,14 @@ class CrossBootViewModel: ObservableObject {
     
     // MARK: - Drive Operations
     
-    /// Scan for available USB drives
     func scanDrives() async {
         isScanning = true
         drives = await diskManager.listRemovableDrives()
         
-        // Auto-select first drive if available
         if selectedDrive == nil, let first = drives.first {
             selectedDrive = first
         }
         
-        // Clear selection if drive was removed
         if let selected = selectedDrive, !drives.contains(where: { $0.id == selected.id }) {
             selectedDrive = drives.first
         }
@@ -58,7 +52,6 @@ class CrossBootViewModel: ObservableObject {
     
     // MARK: - ISO Operations
     
-    /// Show file picker to select ISO
     func selectISO() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.init(filenameExtension: "iso")!]
@@ -71,7 +64,6 @@ class CrossBootViewModel: ObservableObject {
         }
     }
     
-    /// Handle ISO file drop
     func handleISODrop(_ urls: [URL]) {
         guard let url = urls.first,
               url.pathExtension.lowercased() == "iso" else {
@@ -90,16 +82,13 @@ class CrossBootViewModel: ObservableObject {
     
     // MARK: - Main Process
     
-    /// Create bootable USB drive
     func createBootableUSB() {
         currentTask = Task {
             await performCreateBootableUSB()
         }
     }
     
-    /// Abort the current process
     func abortProcess() {
-        // Show aborting status immediately
         processState.stage = .aborting
         
         currentTask?.cancel()
@@ -111,7 +100,6 @@ class CrossBootViewModel: ObservableObject {
         }
     }
     
-    /// Internal implementation of create bootable USB
     private func performCreateBootableUSB() async {
         guard let drive = selectedDrive else {
             processState.stage = .error("No USB drive selected")
@@ -128,33 +116,26 @@ class CrossBootViewModel: ObservableObject {
         var mountPoint: String?
         
         do {
-            // Step 1: Format USB
             processState = ProcessState(stage: .formatting, progress: 2)
             try await diskManager.formatDrive(drive.device)
             
-            // Check for cancellation
             try Task.checkCancellation()
             processState.progress = 5
             
-            // Get USB mount point
             guard let usbPath = await diskManager.getMountPoint(drive.device) else {
                 throw DiskError.mountPointNotFound
             }
             
-            // Step 2: Mount ISO and analyze
             processState.stage = .analyzing
             mountPoint = try await isoHandler.mountISO(iso.url)
             
-            // Check if WIM needs splitting
             guard let safeMountPoint = mountPoint else {
                 throw ISOError.mountFailed
             }
             let (needsSplit, wimPath) = await isoHandler.checkWIMSize(safeMountPoint)
             
-            // Check for cancellation
             try Task.checkCancellation()
             
-            // Step 3: Split WIM if needed
             if needsSplit, let wim = wimPath {
                 processState.stage = .splitting
                 hasSplit = true
@@ -173,7 +154,6 @@ class CrossBootViewModel: ObservableObject {
                 await isoHandler.setTempDirectory(tempDir)
             }
             
-            // Step 4: Copy files
             processState.stage = .copying
             
             guard let sourceMount = mountPoint else {
@@ -188,7 +168,7 @@ class CrossBootViewModel: ObservableObject {
             ) { [weak self] progress, fileName in
                 guard let self = self else { return }
                 
-                // Adjust progress based on whether split happened
+                // Adjust progress 
                 let adjusted: Double
                 if hasSplit {
                     // Split happened: 15% -> 99%
@@ -202,7 +182,6 @@ class CrossBootViewModel: ObservableObject {
                 self.processState.currentFile = fileName
             }
             
-            // Step 5: Create autounattend.xml if needed
             if bypassRequirements || bypassOnlineAccount {
                 try await isoHandler.createAutounattend(
                     at: usbPath,
@@ -211,10 +190,8 @@ class CrossBootViewModel: ObservableObject {
                 )
             }
             
-            // Done!
             processState = ProcessState(stage: .done, progress: 100)
             
-            // Show success alert
             showAlert(
                 title: "Success",
                 message: "Bootable USB created successfully!",
@@ -222,7 +199,6 @@ class CrossBootViewModel: ObservableObject {
             )
             
         } catch is CancellationError {
-            // Task was cancelled, cleanup already handled in abortProcess()
             return
         } catch {
             processState.stage = .error(error.localizedDescription)

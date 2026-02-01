@@ -1,6 +1,6 @@
 import Foundation
 
-/// Represents a removable USB drive
+// Represents a removable USB drive
 struct Drive: Identifiable, Hashable {
     let id: String           // e.g., "disk2"
     let device: String       // e.g., "/dev/disk2"

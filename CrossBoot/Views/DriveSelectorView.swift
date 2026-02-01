@@ -1,11 +1,9 @@
 import SwiftUI
 
-/// Dropdown selector for USB drives using native macOS Picker
 struct DriveSelectorView: View {
     let drives: [Drive]
     @Binding var selectedDrive: Drive?
     
-    /// Computed property for Picker selection binding
     private var selection: Binding<String> {
         Binding(
             get: { selectedDrive?.id ?? "" },

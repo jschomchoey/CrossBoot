@@ -1,9 +1,8 @@
 import Foundation
 
-/// Utility for running shell commands
+// Utility for shell commands
 enum ShellHelper {
     
-    /// Run a shell command and return output
     static func run(_ command: String, asAdmin: Bool = false) async throws -> String {
         if asAdmin {
             return try await runWithAdminPrivileges(command)
@@ -37,7 +36,7 @@ enum ShellHelper {
         }
     }
     
-    /// Run command with admin privileges using AppleScript
+    // Run command with admin
     private static func runWithAdminPrivileges(_ command: String) async throws -> String {
         let escapedCommand = command.replacingOccurrences(of: "\"", with: "\\\"")
         let script = """
