@@ -16,6 +16,7 @@ class CrossBootViewModel: ObservableObject {
     private let diskManager = DiskManager.shared
     private let isoHandler = ISOHandler.shared
     private let wimLibService = WimLibService.shared
+    private let powerAssertion = PowerAssertionManager.shared
     
     // MARK: - Task Management
     private var currentTask: Task<Void, Never>?
@@ -96,6 +97,7 @@ class CrossBootViewModel: ObservableObject {
         
         Task {
             await isoHandler.cleanup()
+            await powerAssertion.releaseAssertion()
             processState = ProcessState(stage: .aborted, progress: 0)
         }
     }
@@ -114,6 +116,21 @@ class CrossBootViewModel: ObservableObject {
         var hasSplit = false
         var splitTempDir: URL?
         var mountPoint: String?
+        
+        // Create power assertion to prevent system sleep during USB creation
+        do {
+            try await powerAssertion.createAssertion(reason: "Creating Windows bootable USB")
+        } catch {
+            print("⚠️ Failed to create power assertion: \(error.localizedDescription)")
+            // Continue anyway - this is not fatal
+        }
+        
+        // Ensure power assertion is released in all code paths
+        defer {
+            Task {
+                await powerAssertion.releaseAssertion()
+            }
+        }
         
         do {
             processState = ProcessState(stage: .formatting, progress: 2)

@@ -19,6 +19,7 @@
 		010 /* ShellHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110 /* ShellHelper.swift */; };
 		011 /* CrossBootViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 111 /* CrossBootViewModel.swift */; };
 		012 /* ISODropZoneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 112 /* ISODropZoneView.swift */; };
+		C0D780262F2F0C6F00912BB1 /* PowerAssertionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0D780252F2F0C6F00912BB1 /* PowerAssertionManager.swift */; };
 		C0E5B9122F2E5B4400869CAF /* DriveSelectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0E5B9112F2E5B4400869CAF /* DriveSelectorView.swift */; };
 		C0F6D4472F2E574B00C5A647 /* wimlib-imagex in Resources */ = {isa = PBXBuildFile; fileRef = C0F6D4462F2E574B00C5A647 /* wimlib-imagex */; };
 /* End PBXBuildFile section */
@@ -38,6 +39,7 @@
 		111 /* CrossBootViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrossBootViewModel.swift; sourceTree = "<group>"; };
 		112 /* ISODropZoneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ISODropZoneView.swift; sourceTree = "<group>"; };
 		114 /* CrossBoot.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CrossBoot.entitlements; sourceTree = "<group>"; };
+		C0D780252F2F0C6F00912BB1 /* PowerAssertionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PowerAssertionManager.swift; sourceTree = "<group>"; };
 		C0E5B9112F2E5B4400869CAF /* DriveSelectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveSelectorView.swift; sourceTree = "<group>"; };
 		C0F6D4462F2E574B00C5A647 /* wimlib-imagex */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.executable"; path = "wimlib-imagex"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -99,6 +101,7 @@
 			children = (
 				107 /* DiskManager.swift */,
 				108 /* ISOHandler.swift */,
+				C0D780252F2F0C6F00912BB1 /* PowerAssertionManager.swift */,
 				109 /* WimLibService.swift */,
 				110 /* ShellHelper.swift */,
 			);
@@ -206,6 +209,7 @@
 				002 /* ContentView.swift in Sources */,
 				004 /* Drive.swift in Sources */,
 				005 /* ISOFile.swift in Sources */,
+				C0D780262F2F0C6F00912BB1 /* PowerAssertionManager.swift in Sources */,
 				006 /* ProcessState.swift in Sources */,
 				007 /* DiskManager.swift in Sources */,
 				008 /* ISOHandler.swift in Sources */,
