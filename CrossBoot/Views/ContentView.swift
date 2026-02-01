@@ -16,7 +16,7 @@ struct ContentView: View {
             .disabled(viewModel.processState.isProcessing)
             
             // Destination Disk Section
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 16) {
                 HStack {
                     Text("Destination Disk")
                         .font(.headline)
@@ -87,63 +87,117 @@ struct ContentView: View {
             // Progress Section
             ProgressSection(state: viewModel.processState)
         }
-        .padding(20)
+        .padding(24)
         .onAppear {
             Task { await viewModel.scanDrives() }
         }
     }
 }
 
-// MARK: - Native macOS Button
+// MARK: - Custom Button
 
-struct NativeButton: NSViewRepresentable {
+struct NativeButton: View {
     var title: String
     var isEnabled: Bool
     var isDestructive: Bool = false
     var action: () -> Void
     
-    func makeNSView(context: Context) -> NSButton {
-        let button = NSButton()
-        button.title = title
-        button.bezelStyle = .rounded
-        button.controlSize = .large
-        button.target = context.coordinator
-        button.action = #selector(Coordinator.buttonClicked)
-        
-        if !isDestructive {
-            button.keyEquivalent = "\r"
+    @State private var isHovered = false
+    @State private var isPressed = false
+    
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 12))
+                .foregroundColor(textColor)
+                .frame(maxWidth: .infinity)
+                .frame(height: 34)
+                .background(backgroundGradient)
+                .cornerRadius(6)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .strokeBorder(borderColor, lineWidth: 0.5)
+                )
         }
-        
-        return button
+        .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .onHover { hovering in
+            isHovered = hovering
+        }
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 0)
+                .onChanged { _ in isPressed = true }
+                .onEnded { _ in isPressed = false }
+        )
     }
     
-    func updateNSView(_ nsView: NSButton, context: Context) {
-        nsView.title = title
-        nsView.isEnabled = isEnabled
+    private var backgroundGradient: LinearGradient {
+        if !isEnabled {
+            return LinearGradient(
+                colors: [
+                    Color(NSColor.controlBackgroundColor),
+                    Color(NSColor.controlBackgroundColor).opacity(0.8)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
         
         if isDestructive {
-            nsView.contentTintColor = .systemRed
-            nsView.keyEquivalent = ""
-        } else {
-            nsView.contentTintColor = nil
-            nsView.keyEquivalent = "\r"
+            let baseColor = Color(NSColor.systemRed)
+            if isPressed {
+                return LinearGradient(
+                    colors: [baseColor.opacity(0.7), baseColor.opacity(0.8)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            } else if isHovered {
+                return LinearGradient(
+                    colors: [baseColor.opacity(0.95), baseColor],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+            return LinearGradient(
+                colors: [baseColor.opacity(0.9), baseColor],
+                startPoint: .top,
+                endPoint: .bottom
+            )
         }
+        
+        let accentColor = Color(NSColor.controlAccentColor)
+        if isPressed {
+            return LinearGradient(
+                colors: [accentColor.opacity(0.8), accentColor.opacity(0.8)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        } else if isHovered {
+            return LinearGradient(
+                colors: [accentColor.opacity(0.8), accentColor.opacity(1.05).opacity(1.0)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
+        return LinearGradient(
+            colors: [accentColor.opacity(0.8), accentColor],
+            startPoint: .top,
+            endPoint: .bottom
+        )
     }
     
-    func makeCoordinator() -> Coordinator {
-        Coordinator(action: action)
+    private var textColor: Color {
+        if !isEnabled {
+            return Color(NSColor.disabledControlTextColor)
+        }
+        return .white
     }
     
-    class Coordinator: NSObject {
-        var action: () -> Void
-        
-        init(action: @escaping () -> Void) {
-            self.action = action
+    private var borderColor: Color {
+        if !isEnabled {
+            return Color(NSColor.separatorColor)
         }
-        
-        @objc func buttonClicked() {
-            action()
-        }
+        return Color.clear
     }
 }
 
@@ -159,7 +213,7 @@ struct CustomProgressBar: View {
             ZStack(alignment: .leading) {
                 // Track
                 Capsule()
-                    .fill(Color.secondary.opacity(0.3))
+                    .fill(Color.secondary.opacity(0.15))
                     .frame(height: height)
                 
                 // Fill
@@ -193,19 +247,20 @@ struct ProgressSection: View {
                 Spacer()
                 
                 Text("\(Int(state.progress))%")
-                    .font(.system(.caption, design: .monospaced))
+                    .foregroundColor(statusColor)
+//                    .font(.system(.caption, ))
             }
-            .font(.caption)
+//            .font(.caption)
         }
-        .padding()
-        .background(Color(NSColor.controlBackgroundColor))
-        .cornerRadius(8)
+//        .padding()
+//        .background(Color(NSColor.controlBackgroundColor))
+//        .cornerRadius(8)
     }
     
     private var statusColor: Color {
         switch state.stage {
-        case .error: return .red
-        case .done: return .green
+//        case .error: return .red
+//        case .done: return .green
         default: return .secondary
         }
     }

@@ -11,10 +11,10 @@ struct ISODropZoneView: View {
     
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: 8)
                 .fill(backgroundColor)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12)
+                    RoundedRectangle(cornerRadius: 8)
                         .strokeBorder(
                             isTargeted ? Color.accentColor : Color.gray.opacity(0.3),
                             style: StrokeStyle(lineWidth: 2, dash: isoFile == nil ? [8] : [])
@@ -48,8 +48,8 @@ struct ISODropZoneView: View {
                 .padding()
             } else {
                 VStack(spacing: 8) {
-                    Image(systemName: "plus.circle")
-                        .font(.system(size: 24))
+                    Image(systemName: "plus")
+                        .font(.system(size: 28))
                         .foregroundColor(.secondary)
                     
                     Text("Select an ISO file or drag it here")
@@ -57,7 +57,7 @@ struct ISODropZoneView: View {
                 }
             }
         }
-        .frame(height: 80)
+        .frame(height: 150)
         .contentShape(Rectangle())
         .onTapGesture(perform: onSelect)
         .onDrop(of: [.fileURL], isTargeted: $isTargeted) { providers in
