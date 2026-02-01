@@ -17,7 +17,7 @@ struct ISODropZoneView: View {
                     RoundedRectangle(cornerRadius: 8)
                         .strokeBorder(
                             isTargeted ? Color.accentColor : Color.gray.opacity(0.3),
-                            style: StrokeStyle(lineWidth: 2, dash: isoFile == nil ? [8] : [])
+                            style: StrokeStyle(lineWidth: 1, dash: isoFile == nil ? [6] : [])
                         )
                 )
             
@@ -25,8 +25,8 @@ struct ISODropZoneView: View {
                 // ISO Selected State
                 HStack(spacing: 12) {
                     Image(systemName: "opticaldisc")
-                        .font(.system(size: 40))
-                        .foregroundColor(.blue)
+                        .font(.system(size: 38))
+                        .foregroundColor(.accentColor)
                     
                     VStack(alignment: .leading, spacing: 4) {
                         Text(iso.name)
@@ -49,7 +49,7 @@ struct ISODropZoneView: View {
             } else {
                 VStack(spacing: 8) {
                     Image(systemName: "plus")
-                        .font(.system(size: 28))
+                        .font(.system(size: 20))
                         .foregroundColor(.secondary)
                     
                     Text("Select an ISO file or drag it here")
@@ -57,7 +57,7 @@ struct ISODropZoneView: View {
                 }
             }
         }
-        .frame(height: 150)
+        .frame(height: 75)
         .contentShape(Rectangle())
         .onTapGesture(perform: onSelect)
         .onDrop(of: [.fileURL], isTargeted: $isTargeted) { providers in

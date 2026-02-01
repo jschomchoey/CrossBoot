@@ -8,7 +8,7 @@ struct CrossBootApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .frame(width: 500, height: 500)
+                .frame(width: 450, height: 415)
         }
         .commands {
             CommandGroup(replacing: .newItem) { }
@@ -36,13 +36,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     private func configureWindow(_ window: NSWindow) {
+        guard !(window is NSPanel) else { return }
+        guard window.title == "CrossBoot" || window.title.isEmpty else { return }
+        
         window.styleMask.remove(.resizable)
         window.styleMask.remove(.fullScreen)
         
         // Set fixed size
-        window.setContentSize(NSSize(width: 500, height: 500))
+        window.setContentSize(NSSize(width: 450, height: 415))
         
-        // Disable zoom button (maximize)
+        // Disable maximize button
         window.standardWindowButton(.zoomButton)?.isEnabled = false
     }
 }
