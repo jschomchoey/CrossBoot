@@ -189,13 +189,7 @@ struct NativeButton: View {
         }
         
         let accentColor = Color(NSColor.controlAccentColor)
-        if isPressed {
-            return LinearGradient(
-                colors: [accentColor.opacity(0.8), accentColor.opacity(0.8)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        } else if isHovered {
+        if isHovered {
             return LinearGradient(
                 colors: [accentColor.opacity(0.8), accentColor.opacity(1.05).opacity(1.0)],
                 startPoint: .top,
@@ -235,7 +229,7 @@ struct NativeButton: View {
 struct CustomProgressBar: View {
     var value: Double
     var total: Double
-    var height: CGFloat = 6
+    var height: CGFloat = 5
     
     var body: some View {
         GeometryReader { geometry in
@@ -277,13 +271,8 @@ struct ProgressSection: View {
                 
                 Text("\(Int(state.progress))%")
                     .foregroundColor(statusColor)
-//                    .font(.system(.caption, ))
             }
-//            .font(.caption)
         }
-//        .padding()
-//        .background(Color(NSColor.controlBackgroundColor))
-//        .cornerRadius(8)
     }
     
     private var statusColor: Color {
