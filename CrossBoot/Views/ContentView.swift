@@ -67,7 +67,7 @@ struct ContentView: View {
                 NativeButton(
                     title: "Abort",
                     isEnabled: viewModel.processState.stage != .aborting,
-                    isDestructive: true,
+                    isSecondary: true,
                     action: {
                         viewModel.abortProcess()
                     }
@@ -100,6 +100,7 @@ struct NativeButton: View {
     var title: String
     var isEnabled: Bool
     var isDestructive: Bool = false
+    var isSecondary: Bool = false
     var action: () -> Void
     
     @State private var isHovered = false
@@ -165,6 +166,28 @@ struct NativeButton: View {
             )
         }
         
+        if isSecondary {
+            let baseColor = Color(NSColor.controlBackgroundColor)
+            if isPressed {
+                return LinearGradient(
+                    colors: [baseColor.opacity(0.6), baseColor.opacity(0.7)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            } else if isHovered {
+                return LinearGradient(
+                    colors: [baseColor.opacity(0.9), baseColor],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            }
+            return LinearGradient(
+                colors: [baseColor.opacity(0.8), baseColor.opacity(0.9)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
+        
         let accentColor = Color(NSColor.controlAccentColor)
         if isPressed {
             return LinearGradient(
@@ -190,11 +213,17 @@ struct NativeButton: View {
         if !isEnabled {
             return Color(NSColor.disabledControlTextColor)
         }
+        if isSecondary {
+            return Color(NSColor.labelColor)
+        }
         return .white
     }
     
     private var borderColor: Color {
         if !isEnabled {
+            return Color(NSColor.separatorColor)
+        }
+        if isSecondary {
             return Color(NSColor.separatorColor)
         }
         return Color.clear
