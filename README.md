@@ -6,18 +6,20 @@ A simple tool for creating Windows bootable USB drives on macOS.
 
 ## Features
 
-- Clean and easy-to-use interface
-- Automatic WIM file splitting for FAT32 compatibility (handles files over 4GB)
+- Clean, user-friendly interface
+- Auto-split WIM files for FAT32 compatibility (supports >4GB files)
 - Supports both Legacy BIOS and UEFI boot modes
-- Secure Boot compatible
+- Secure Boot ready
 - Drag-and-drop ISO support
 - Real-time progress tracking
-- Option to bypass Windows 11 hardware requirements and Online Account
+- Cancelable operations
+- Prevents system sleep during processing
+- Bypass Windows 11 restrictions (TPM, Secure Boot, & Online Account)
 
 ## Requirements
 
 - macOS 11 or later
-- Apple Silicon or Intel
+- Mac Apple Silicon or Intel
 - Windows ISO file
 - USB drive (8GB or larger recommended)
 
