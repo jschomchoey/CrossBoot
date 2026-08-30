@@ -32,14 +32,14 @@ final class ProcessStateTests: XCTestCase {
     @MainActor
     func testProgressMapsStagesOntoTheirOwnSlice() {
         // Splitting occupies 5% - 15% of the overall bar.
-        XCTAssertEqual(CrossBootViewModel.overallProgress(0, from: 5, to: 15), 5, accuracy: 0.001)
-        XCTAssertEqual(CrossBootViewModel.overallProgress(50, from: 5, to: 15), 10, accuracy: 0.001)
-        XCTAssertEqual(CrossBootViewModel.overallProgress(100, from: 5, to: 15), 15, accuracy: 0.001)
+        XCTAssertEqual(MediaBuilder.overallProgress(0, from: 5, to: 15), 5, accuracy: 0.001)
+        XCTAssertEqual(MediaBuilder.overallProgress(50, from: 5, to: 15), 10, accuracy: 0.001)
+        XCTAssertEqual(MediaBuilder.overallProgress(100, from: 5, to: 15), 15, accuracy: 0.001)
 
         // Copying runs to 99% from wherever the previous stage ended.
-        XCTAssertEqual(CrossBootViewModel.overallProgress(0, from: 15, to: 99), 15, accuracy: 0.001)
-        XCTAssertEqual(CrossBootViewModel.overallProgress(100, from: 15, to: 99), 99, accuracy: 0.001)
-        XCTAssertEqual(CrossBootViewModel.overallProgress(100, from: 5, to: 99), 99, accuracy: 0.001)
+        XCTAssertEqual(MediaBuilder.overallProgress(0, from: 15, to: 99), 15, accuracy: 0.001)
+        XCTAssertEqual(MediaBuilder.overallProgress(100, from: 15, to: 99), 99, accuracy: 0.001)
+        XCTAssertEqual(MediaBuilder.overallProgress(100, from: 5, to: 99), 99, accuracy: 0.001)
     }
 
     // Identifiers get reused across replugs, so identity must cover the whole drive.

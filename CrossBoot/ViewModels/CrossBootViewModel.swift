@@ -7,40 +7,28 @@ class CrossBootViewModel: ObservableObject {
     // MARK: - Published Properties
     @Published var drives: [Drive] = []
     @Published var selectedDrive: Drive?
-    @Published var isoFile: ISOFile?
+    @Published var isoFiles: [ISOFile] = []
     @Published var bypassRequirements = false
     @Published var bypassOnlineAccount = false
     @Published var processState = ProcessState()
     @Published var isScanning = false
+    @Published var isAnalyzing = false
 
     // Bad input and scan failures keep the user on the setup form; only a run
     // that actually started can finish in a failed state.
     @Published var inputError: String?
-    
+
     // MARK: - Services
     private let diskManager = DiskManager.shared
     private let isoHandler = ISOHandler.shared
     private let wimLibService = WimLibService.shared
     private let powerAssertion = PowerAssertionManager.shared
-    
+
     // MARK: - Task Management
     private var currentTask: Task<Void, Never>?
 
-    // Points on the overall progress bar where each stage hands over to the next.
-    private enum Milestone {
-        static let formatStarted: Double = 2
-        static let formatted: Double = 5
-        static let split: Double = 15
-        static let copied: Double = 99
-    }
-
-    // Rescales a stage's own 0-100 progress into its slice of the overall bar.
-    static func overallProgress(_ stageProgress: Double, from start: Double, to end: Double) -> Double {
-        start + stageProgress / 100 * (end - start)
-    }
-    
     // MARK: - Initialization
-    
+
     init() {
         Task {
             await diskManager.startMonitoring { [weak self] in
@@ -51,9 +39,9 @@ class CrossBootViewModel: ObservableObject {
             }
         }
     }
-    
+
     // MARK: - Drive Operations
-    
+
     func scanDrives() async {
         isScanning = true
         defer { isScanning = false }
@@ -67,7 +55,7 @@ class CrossBootViewModel: ObservableObject {
             Log.disk.error("Failed to list drives: \(error.localizedDescription, privacy: .public)")
             inputError = "Could not list drives: \(error.localizedDescription)"
         }
-        
+
         // Match on the whole drive, not just its identifier: identifiers are
         // reused across replugs, so a stale value can describe a different disk.
         if let selected = selectedDrive {
@@ -76,46 +64,88 @@ class CrossBootViewModel: ObservableObject {
             selectedDrive = drives.first
         }
     }
-    
+
     // MARK: - ISO Operations
-    
-    func selectISO() {
+
+    func selectISOs() {
         let panel = NSOpenPanel()
         if let isoType = UTType(filenameExtension: "iso") {
             panel.allowedContentTypes = [isoType]
         }
-        panel.allowsMultipleSelection = false
+        panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
-        panel.message = "Select a Windows ISO file"
-        
-        if panel.runModal() == .OK, let url = panel.url {
-            handleISOSelection(url)
-        }
-    }
-    
-    func handleISODrop(_ urls: [URL]) {
-        guard let url = urls.first else { return }
+        panel.message = "Select one or more Windows ISO files"
 
-        guard url.pathExtension.lowercased() == "iso" else {
-            inputError = "\(url.lastPathComponent) is not an ISO file"
-            return
+        if panel.runModal() == .OK {
+            addISOs(panel.urls)
+        }
+    }
+
+    func addISOs(_ urls: [URL]) {
+        guard !processState.isProcessing else { return }
+
+        Task { await analyze(urls) }
+    }
+
+    func removeISO(_ iso: ISOFile) {
+        guard !processState.isProcessing else { return }
+
+        isoFiles.removeAll { $0.id == iso.id }
+        inputError = nil
+    }
+
+    // Each ISO is mounted and inspected as it is added, so a combination Windows
+    // Setup could not handle is refused here rather than after the drive is
+    // erased. It also gives the list something to say about each file.
+    private func analyze(_ urls: [URL]) async {
+        isAnalyzing = true
+        defer { isAnalyzing = false }
+
+        for url in urls {
+            guard url.pathExtension.lowercased() == "iso" else {
+                inputError = "\(url.lastPathComponent) is not an ISO file"
+                continue
+            }
+
+            guard !isoFiles.contains(where: { $0.url == url }) else { continue }
+
+            do {
+                let iso = try await isoHandler.analyze(url)
+
+                if let conflict = architectureConflict(with: iso) {
+                    inputError = conflict
+                    continue
+                }
+
+                isoFiles.append(iso)
+                // The newest Windows goes first: it supplies the boot files, and
+                // the setup menu lists the images in this order.
+                isoFiles.sort { $0.newestBuild > $1.newestBuild }
+
+                inputError = nil
+                processState = ProcessState()
+            } catch {
+                Log.process.error("Failed to analyze ISO: \(error.localizedDescription, privacy: .public)")
+                inputError = "Could not read \(url.lastPathComponent): \(error.localizedDescription)"
+            }
+        }
+    }
+
+    private func architectureConflict(with iso: ISOFile) -> String? {
+        guard let added = iso.architecture,
+              let existing = isoFiles.compactMap(\.architecture).first,
+              added != existing else {
+            return nil
         }
 
-        handleISOSelection(url)
+        return """
+        \(iso.name) is \(added.name) but the drive already holds \(existing.name) media. \
+        Windows Setup boots one architecture, so they cannot share a drive.
+        """
     }
-    
-    private func handleISOSelection(_ url: URL) {
-        do {
-            isoFile = try ISOFile(url: url)
-            inputError = nil
-            processState = ProcessState()
-        } catch {
-            inputError = "Failed to read ISO: \(error.localizedDescription)"
-        }
-    }
-    
+
     // MARK: - Main Process
-    
+
     func createBootableUSB() {
         currentTask = Task {
             await performCreateBootableUSB()
@@ -136,19 +166,21 @@ class CrossBootViewModel: ObservableObject {
             processState = ProcessState(stage: .aborted, progress: 0)
         }
     }
-    
+
     private func performCreateBootableUSB() async {
         guard let drive = selectedDrive else {
             processState = .failed("No USB drive selected")
             return
         }
-        
-        guard let iso = isoFile else {
-            processState = .failed("No ISO file selected")
+
+        let plan: InstallMediaPlan
+        do {
+            plan = try InstallMediaPlan.make(from: isoFiles)
+        } catch {
+            // Nothing has been touched yet, so this is still a setup problem.
+            inputError = error.localizedDescription
             return
         }
-        
-        var splitTempDir: URL?
 
         // Create power assertion to prevent system sleep during USB creation
         do {
@@ -158,81 +190,19 @@ class CrossBootViewModel: ObservableObject {
             Log.process.error("Failed to create power assertion: \(error.localizedDescription, privacy: .public)")
         }
 
+        let builder = MediaBuilder { [weak self] state in
+            self?.processState = state
+        }
+
         do {
-            // Check before erasing rather than filling the drive and failing
-            // partway through the copy.
-            guard drive.size >= iso.sizeBytes else {
-                throw DiskError.insufficientSpace(required: iso.sizeBytes, available: drive.size)
-            }
-
-            processState = ProcessState(stage: .formatting, progress: Milestone.formatStarted)
-            try await diskManager.formatDrive(drive)
-
-            try Task.checkCancellation()
-            processState.progress = Milestone.formatted
-
-            guard let usbPath = await diskManager.getMountPoint(drive.device) else {
-                throw DiskError.mountPointNotFound
-            }
-
-            processState.stage = .analyzing
-            let mountPoint = try await isoHandler.mountISO(iso.url)
-            let (needsSplit, wimPath) = await isoHandler.checkWIMSize(mountPoint)
-
-            try Task.checkCancellation()
-
-            if needsSplit, let wim = wimPath {
-                processState.stage = .splitting
-
-                let tempDir = try await wimLibService.splitWIM(wim) { [weak self] percent in
-                    self?.processState.progress = Self.overallProgress(
-                        Double(percent),
-                        from: Milestone.formatted,
-                        to: Milestone.split
-                    )
-                }
-
-                splitTempDir = tempDir
-                await isoHandler.setTempDirectory(tempDir)
-            }
-
-            processState.stage = .copying
-
-            // Copying picks up wherever the previous stage left off.
-            let copyStart = splitTempDir == nil ? Milestone.formatted : Milestone.split
-
-            try await isoHandler.copyFilesToUSB(
-                from: mountPoint,
-                to: usbPath,
-                splitTempDir: splitTempDir,
-                skipInstallWim: splitTempDir != nil
-            ) { [weak self] progress, fileName in
-                guard let self = self else { return }
-
-                self.processState.progress = Self.overallProgress(
-                    progress,
-                    from: copyStart,
-                    to: Milestone.copied
-                )
-                self.processState.currentFile = fileName
-            }
-
-            if bypassRequirements || bypassOnlineAccount {
-                try await isoHandler.createAutounattend(
-                    at: usbPath,
-                    bypassRequirements: bypassRequirements,
-                    bypassOnlineAccount: bypassOnlineAccount
-                )
-            }
-            
-            processState = ProcessState(stage: .done, progress: 100)
-
-            showAlert(
-                title: "Success",
-                message: "The drive is ready. You can eject it and boot from it.",
-                style: .informational
+            try await builder.build(
+                plan,
+                onto: drive,
+                bypassRequirements: bypassRequirements,
+                bypassOnlineAccount: bypassOnlineAccount
             )
 
+            showAlert(title: "Success", message: Self.successMessage(for: plan), style: .informational)
         } catch is CancellationError {
             // abortProcess owns the aborted state once this run has unwound.
             await releaseResources()
@@ -241,11 +211,7 @@ class CrossBootViewModel: ObservableObject {
             await releaseResources()
 
             processState = .failed(error.localizedDescription)
-            showAlert(
-                title: "Could not finish",
-                message: error.localizedDescription,
-                style: .critical
-            )
+            showAlert(title: "Could not finish", message: error.localizedDescription, style: .critical)
             return
         }
 
@@ -258,11 +224,23 @@ class CrossBootViewModel: ObservableObject {
         await isoHandler.cleanup()
         await powerAssertion.releaseAssertion()
     }
-    
+
     // MARK: - Helpers
-    
+
     var canStart: Bool {
-        selectedDrive != nil && isoFile != nil && !processState.isProcessing
+        selectedDrive != nil && !isoFiles.isEmpty && !isAnalyzing && !processState.isProcessing
+    }
+
+    private static func successMessage(for plan: InstallMediaPlan) -> String {
+        guard case .merged(_, let groups, _) = plan.mode else {
+            return "The drive is ready. You can eject it and boot from it."
+        }
+
+        let count = groups.flatMap(\.images).count
+        return """
+        The drive is ready with \(count) Windows editions from \(groups.count) ISOs. \
+        Windows Setup will ask which one to install. Eject it and boot from it.
+        """
     }
 
     private func showAlert(title: String, message: String, style: NSAlert.Style) {
@@ -274,11 +252,10 @@ class CrossBootViewModel: ObservableObject {
         alert.runModal()
     }
 
-    
     /// Show confirmation dialog
     func confirmErase() -> Bool {
         guard let drive = selectedDrive else { return false }
-        
+
         let alert = NSAlert()
         alert.messageText = "Erase Everything?"
         alert.informativeText = """

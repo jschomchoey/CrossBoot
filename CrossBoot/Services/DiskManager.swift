@@ -194,6 +194,7 @@ enum DiskError: LocalizedError {
     case driveUnavailable(String)
     case driveChanged
     case insufficientSpace(required: Int64, available: Int64)
+    case insufficientScratchSpace(required: Int64, available: Int64)
     case infoUnavailable(String)
     case mountPointNotFound
 
@@ -205,6 +206,11 @@ enum DiskError: LocalizedError {
             return "The selected drive changed since you chose it. Nothing was erased - refresh the drive list and try again."
         case .insufficientSpace(let required, let available):
             return "The drive holds \(available.formattedSize) but \(required.formattedSize) is needed. Nothing was erased."
+        case .insufficientScratchSpace(let required, let available):
+            return """
+            Combining these ISOs needs \(required.formattedSize) of free space on this Mac while it works, \
+            but only \(available.formattedSize) is available. Nothing was erased.
+            """
         case .infoUnavailable(let device):
             return "Could not read disk information for \(device)"
         case .mountPointNotFound:

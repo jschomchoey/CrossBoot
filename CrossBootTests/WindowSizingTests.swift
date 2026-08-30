@@ -18,7 +18,7 @@ final class WindowSizingTests: XCTestCase {
     }
 
     private func viewModel(
-        withISO: Bool = false,
+        isoCount: Int = 0,
         drive: Bool = true,
         state: ProcessState = ProcessState(),
         inputError: String? = nil
@@ -32,12 +32,20 @@ final class WindowSizingTests: XCTestCase {
             model.selectedDrive = model.drives.first
         }
 
-        if withISO {
+        for index in 0..<isoCount {
             let url = URL(fileURLWithPath: NSTemporaryDirectory())
-                .appendingPathComponent("Win11_23H2_English_x64.iso")
+                .appendingPathComponent("Win11_23H2_English_x64_\(index).iso")
             try Data().write(to: url)
             addTeardownBlock { try? FileManager.default.removeItem(at: url) }
-            model.isoFile = try ISOFile(url: url)
+
+            model.isoFiles.append(try ISOFile(
+                url: url,
+                installImage: InstallImage(relativePath: "sources/install.wim", sizeBytes: 5_000_000_000),
+                images: (1...11).map {
+                    WindowsImage(index: $0, name: "Windows 11 Edition \($0)", architecture: .x64, build: 26100, totalBytes: 0)
+                },
+                hasBootLoader: true
+            ))
         }
 
         model.processState = state
@@ -56,18 +64,33 @@ final class WindowSizingTests: XCTestCase {
 
         let others: [(String, CrossBootViewModel)] = [
             ("no drive attached", try viewModel(drive: false)),
-            ("ISO chosen", try viewModel(withISO: true)),
-            ("copying", try viewModel(withISO: true, state: ProcessState(stage: .copying, progress: 42))),
-            ("stopping", try viewModel(withISO: true, state: ProcessState(stage: .aborting, progress: 42))),
-            ("done", try viewModel(withISO: true, state: ProcessState(stage: .done, progress: 100))),
-            ("aborted", try viewModel(withISO: true, state: ProcessState(stage: .aborted))),
-            ("failed", try viewModel(withISO: true, state: .failed("The drive was disconnected."))),
+            ("one ISO chosen", try viewModel(isoCount: 1)),
+            // The list scrolls rather than growing, so a fourth ISO must not
+            // push the window taller than a first one did.
+            ("three ISOs chosen", try viewModel(isoCount: 3)),
+            ("six ISOs chosen", try viewModel(isoCount: 6)),
+            ("analyzing", try analyzingViewModel()),
+            ("merging", try viewModel(
+                isoCount: 2,
+                state: ProcessState(stage: .merging, progress: 30, currentFile: "Windows 11 Pro (Build 26100)")
+            )),
+            ("copying", try viewModel(isoCount: 1, state: ProcessState(stage: .copying, progress: 42, currentFile: "install.swm"))),
+            ("stopping", try viewModel(isoCount: 1, state: ProcessState(stage: .aborting, progress: 42))),
+            ("done", try viewModel(isoCount: 1, state: ProcessState(stage: .done, progress: 100))),
+            ("aborted", try viewModel(isoCount: 1, state: ProcessState(stage: .aborted))),
+            ("failed", try viewModel(isoCount: 1, state: .failed("The drive was disconnected."))),
             ("bad drop", try viewModel(inputError: "notes.txt is not an ISO file"))
         ]
 
         for (name, model) in others {
             XCTAssertEqual(fittingHeight(of: model), idle, accuracy: 0.5, "height changed in state: \(name)")
         }
+    }
+
+    private func analyzingViewModel() throws -> CrossBootViewModel {
+        let model = try viewModel(isoCount: 1)
+        model.isAnalyzing = true
+        return model
     }
 
     // The status line is the one part that takes arbitrary text, so it is where

@@ -1,17 +1,19 @@
 import Foundation
 
-// Handles ISO mounting, file copying, and WIM operations
+// Handles ISO mounting, inspection and file copying. Everything a run mounts or
+// writes to scratch space is tracked here so `cleanup()` can release all of it.
 actor ISOHandler {
     static let shared = ISOHandler()
 
     private static let hdiutil = "/usr/bin/hdiutil"
 
-    private var currentMountPoint: String?
-    private var tempDirectory: URL?
+    private var mountPoints: Set<String> = []
+    private var temporaryDirectories: [URL] = []
 
     private init() {}
 
-    // Mount an ISO file and return the mount point
+    // MARK: - Mounting
+
     func mountISO(_ isoURL: URL) async throws -> String {
         // -plist keeps this off free-form output: an image can expose several
         // entities and only some of them carry a mount point.
@@ -24,48 +26,103 @@ actor ISOHandler {
             throw ISOError.mountFailed
         }
 
-        currentMountPoint = mountPoint
+        mountPoints.insert(mountPoint)
         return mountPoint
     }
 
-    // Unmount the ISO
-    func unmountISO() async {
-        guard let mountPoint = currentMountPoint else { return }
+    func unmountISO(_ mountPoint: String) async {
+        guard mountPoints.contains(mountPoint) else { return }
         _ = try? await ShellHelper.run(Self.hdiutil, ["detach", mountPoint, "-force"])
-        currentMountPoint = nil
+        mountPoints.remove(mountPoint)
     }
-    
-    // Check > 4GB for FAT32
-    func checkWIMSize(_ mountPoint: String) async -> (needsSplit: Bool, wimPath: String?) {
-        let wimPath = "\(mountPoint)/sources/install.wim"
-        
-        guard FileManager.default.fileExists(atPath: wimPath) else {
-            return (false, nil)
-        }
-        
+
+    // MARK: - Inspection
+
+    // Mount an ISO just long enough to learn what is inside it. Doing this when
+    // the file is picked means an unusable combination is refused before the
+    // drive is erased rather than halfway through a run.
+    func analyze(_ isoURL: URL) async throws -> ISOFile {
+        let mountPoint = try await mountISO(isoURL)
+
         do {
-            let attributes = try FileManager.default.attributesOfItem(atPath: wimPath)
-            let size = attributes[.size] as? Int64 ?? 0
-            let fourGB: Int64 = 4 * 1024 * 1024 * 1024
-            
-            return (size > fourGB, wimPath)
+            let installImage = Self.installImage(in: mountPoint)
+            var images: [WindowsImage] = []
+
+            if let installImage {
+                let path = (mountPoint as NSString).appendingPathComponent(installImage.relativePath)
+                images = try await WimLibService.shared.inspectImages(at: path)
+            }
+
+            let iso = try ISOFile(
+                url: isoURL,
+                installImage: installImage,
+                images: images,
+                hasBootLoader: Self.hasBootLoader(in: mountPoint)
+            )
+
+            await unmountISO(mountPoint)
+            return iso
         } catch {
-            return (false, nil)
+            await unmountISO(mountPoint)
+            throw error
         }
     }
-    
-    // Get all files in the mounted ISO
+
+    // Locate sources/install.wim or sources/install.esd. ISO filesystems are
+    // case-sensitive on macOS while Windows media is inconsistent about case, so
+    // every component is matched without regard to it.
+    static func installImage(in mountPoint: String) -> InstallImage? {
+        guard let sources = entry(named: "sources", in: mountPoint) else { return nil }
+
+        for fileName in ["install.wim", "install.esd"] {
+            guard let path = entry(named: fileName, in: sources),
+                  let attributes = try? FileManager.default.attributesOfItem(atPath: path) else {
+                continue
+            }
+
+            return InstallImage(
+                relativePath: String(path.dropFirst(mountPoint.count + 1)),
+                sizeBytes: attributes[.size] as? Int64 ?? 0
+            )
+        }
+
+        return nil
+    }
+
+    // The signed loader firmware runs first. Without it the media cannot boot at
+    // all, let alone with Secure Boot on.
+    static func hasBootLoader(in mountPoint: String) -> Bool {
+        guard let efi = entry(named: "EFI", in: mountPoint),
+              let boot = entry(named: "boot", in: efi),
+              let contents = try? FileManager.default.contentsOfDirectory(atPath: boot) else {
+            return false
+        }
+
+        return contents.contains { $0.lowercased().hasSuffix(".efi") }
+    }
+
+    private static func entry(named name: String, in directory: String) -> String? {
+        guard let contents = try? FileManager.default.contentsOfDirectory(atPath: directory),
+              let match = contents.first(where: { $0.caseInsensitiveCompare(name) == .orderedSame }) else {
+            return nil
+        }
+
+        return (directory as NSString).appendingPathComponent(match)
+    }
+
+    // MARK: - Copying
+
     func getAllFiles(_ directory: String) throws -> [(path: String, size: Int64)] {
         var results: [(path: String, size: Int64)] = []
         let fileManager = FileManager.default
-        
+
         guard let enumerator = fileManager.enumerator(atPath: directory) else {
             throw ISOError.enumerationFailed
         }
-        
+
         while let relativePath = enumerator.nextObject() as? String {
             let fullPath = (directory as NSString).appendingPathComponent(relativePath)
-            
+
             var isDirectory: ObjCBool = false
             if fileManager.fileExists(atPath: fullPath, isDirectory: &isDirectory), !isDirectory.boolValue {
                 let attributes = try? fileManager.attributesOfItem(atPath: fullPath)
@@ -73,31 +130,29 @@ actor ISOHandler {
                 results.append((path: fullPath, size: size))
             }
         }
-        
+
         return results
     }
-    
-    // Copy files to USB
+
+    // Copy the base ISO onto the drive, minus the paths the run replaces, plus
+    // whatever `installSources` holds - the merged or split install image, which
+    // always lands in sources/.
     func copyFilesToUSB(
         from mountPoint: String,
         to usbPath: String,
-        splitTempDir: URL?,
-        skipInstallWim: Bool,
+        excluding excludedRelativePaths: Set<String>,
+        installSources: URL?,
         onProgress: @escaping @Sendable @MainActor (Double, String) -> Void
     ) async throws {
-        var filesToCopy = try getAllFiles(mountPoint)
-        
-        if skipInstallWim {
-            filesToCopy = filesToCopy.filter { !$0.path.lowercased().hasSuffix("install.wim") }
+        var filesToCopy = try getAllFiles(mountPoint).filter { file in
+            let relativePath = String(file.path.dropFirst(mountPoint.count + 1)).lowercased()
+            return !excludedRelativePaths.contains(relativePath)
         }
-        
-        if let tempDir = splitTempDir {
-            let swmFiles = try getAllFiles(tempDir.path)
-            for swm in swmFiles {
-                filesToCopy.append((path: swm.path, size: swm.size))
-            }
+
+        if let installSources {
+            filesToCopy.append(contentsOf: try getAllFiles(installSources.path))
         }
-        
+
         let totalBytes = filesToCopy.reduce(0) { $0 + $1.size }
         guard totalBytes > 0 else {
             throw ISOError.emptySource
@@ -107,44 +162,43 @@ actor ISOHandler {
 
         let fileManager = FileManager.default
         let bufferSize = 32 * 1024 * 1024 // 32MB buffer
-        
+
         for file in filesToCopy {
             try Task.checkCancellation()
-            
+
             let relativePath: String
-            if let tempDir = splitTempDir, file.path.hasPrefix(tempDir.path) {
-                let fileName = (file.path as NSString).lastPathComponent
-                relativePath = "sources/\(fileName)"
+            if let installSources, file.path.hasPrefix(installSources.path) {
+                relativePath = "sources/\((file.path as NSString).lastPathComponent)"
             } else {
                 relativePath = String(file.path.dropFirst(mountPoint.count + 1))
             }
-            
+
             let destPath = (usbPath as NSString).appendingPathComponent(relativePath)
             let destDir = (destPath as NSString).deletingLastPathComponent
-            
+
             try fileManager.createDirectory(atPath: destDir, withIntermediateDirectories: true)
-            
+
             let fileName = (file.path as NSString).lastPathComponent
-            
+
             guard let inputStream = InputStream(fileAtPath: file.path) else {
                 throw ISOError.copyFailed("Cannot open \(fileName)")
             }
-            
+
             try? fileManager.removeItem(atPath: destPath)
-            
+
             guard let outputStream = OutputStream(toFileAtPath: destPath, append: false) else {
                 throw ISOError.copyFailed("Cannot create \(fileName)")
             }
-            
+
             inputStream.open()
             outputStream.open()
             defer {
                 inputStream.close()
                 outputStream.close()
             }
-            
+
             var buffer = [UInt8](repeating: 0, count: bufferSize)
-            
+
             while inputStream.hasBytesAvailable {
                 try Task.checkCancellation()
 
@@ -165,7 +219,7 @@ actor ISOHandler {
             }
         }
     }
-    
+
     // OutputStream accepts fewer bytes than offered once the destination fills
     // up. Ignoring the count silently truncates files and still reports success,
     // so keep writing until the whole chunk lands.
@@ -204,7 +258,7 @@ actor ISOHandler {
         <?xml version="1.0" encoding="utf-8"?>
         <unattend xmlns="urn:schemas-microsoft-com:unattend">
         """
-        
+
         if bypassRequirements {
             content += """
             
@@ -241,7 +295,7 @@ actor ISOHandler {
             </settings>
             """
         }
-        
+
         if bypassOnlineAccount {
             content += """
             
@@ -257,28 +311,42 @@ actor ISOHandler {
             </settings>
             """
         }
-        
+
         content += """
         
         </unattend>
         """
-        
+
         let autounattendPath = (usbPath as NSString).appendingPathComponent("autounattend.xml")
         try content.write(toFile: autounattendPath, atomically: true, encoding: .utf8)
     }
-    
-    // Cleanup temp directory
-    func cleanup() async {
-        await unmountISO()
-        
-        if let tempDir = tempDirectory {
-            try? FileManager.default.removeItem(at: tempDir)
-            tempDirectory = nil
-        }
+
+    // MARK: - Scratch space
+
+    func makeTemporaryDirectory() throws -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("crossboot-\(UUID().uuidString)")
+
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        temporaryDirectories.append(directory)
+        return directory
     }
-    
-    func setTempDirectory(_ url: URL) {
-        tempDirectory = url
+
+    func removeItem(at url: URL) {
+        try? FileManager.default.removeItem(at: url)
+    }
+
+    // Release everything the run acquired, whether it finished or was stopped.
+    func cleanup() async {
+        for mountPoint in mountPoints {
+            _ = try? await ShellHelper.run(Self.hdiutil, ["detach", mountPoint, "-force"])
+        }
+        mountPoints.removeAll()
+
+        for directory in temporaryDirectories {
+            try? FileManager.default.removeItem(at: directory)
+        }
+        temporaryDirectories.removeAll()
     }
 }
 

@@ -17,8 +17,20 @@ struct ContentView: View {
     var body: some View {
         VStack(spacing: 0) {
             Form {
-                Section("Windows ISO") {
-                    ISORow(isoFile: viewModel.isoFile, onSelect: viewModel.selectISO)
+                Section {
+                    ISOListView(
+                        isoFiles: viewModel.isoFiles,
+                        isAnalyzing: viewModel.isAnalyzing,
+                        onAdd: viewModel.selectISOs,
+                        onRemove: viewModel.removeISO
+                    )
+                } header: {
+                    Text("Windows ISOs")
+                } footer: {
+                    Text("""
+                    Add more than one to put several Windows versions on the same drive. \
+                    Setup asks which one to install, and the drive still boots with Secure Boot on.
+                    """)
                 }
 
                 Section {
@@ -161,7 +173,12 @@ struct ContentView: View {
     // A bad drop or a failed scan is about to be corrected here, so it takes the
     // status line over whatever the last run left behind.
     private var statusMessage: String {
-        viewModel.inputError ?? viewModel.processState.stage.description
+        if let inputError = viewModel.inputError { return inputError }
+
+        let stage = viewModel.processState.stage.description
+        let file = viewModel.processState.currentFile
+
+        return file.isEmpty ? stage : "\(stage) — \(file)"
     }
 
     private var statusTint: Color {
@@ -198,54 +215,54 @@ struct ContentView: View {
     }
 
     private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
-        guard acceptsDrop, let provider = providers.first else { return false }
+        guard acceptsDrop else { return false }
 
-        provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { data, _ in
-            guard let data = data as? Data,
-                  let url = URL(dataRepresentation: data, relativeTo: nil) else {
-                return
-            }
+        // A drop can carry several files and each provider answers on its own
+        // thread, so the URLs are gathered before the view model sees any of
+        // them: one batch means one analysis pass and one error message.
+        let dropped = DroppedURLs()
+        let providersRemaining = DispatchGroup()
 
-            // The type is only known here, so a non-ISO drop is reported by the
-            // view model rather than dropped silently.
-            DispatchQueue.main.async {
-                viewModel.handleISODrop([url])
+        for provider in providers {
+            providersRemaining.enter()
+            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { data, _ in
+                defer { providersRemaining.leave() }
+
+                guard let data = data as? Data,
+                      let url = URL(dataRepresentation: data, relativeTo: nil) else {
+                    return
+                }
+
+                dropped.append(url)
             }
+        }
+
+        // The type is only known here, so a non-ISO drop is reported by the
+        // view model rather than dropped silently.
+        providersRemaining.notify(queue: .main) {
+            viewModel.addISOs(dropped.urls)
         }
 
         return true
     }
 }
 
-/// One Form row describing the chosen ISO, or the prompt to choose one.
-///
-/// Both states share a single layout rather than branching into two: the window
-/// is sized to its content, so a row that changed height on selection would
-/// resize the window under the pointer.
-private struct ISORow: View {
-    let isoFile: ISOFile?
-    let onSelect: () -> Void
+// Drop callbacks answer on whichever thread the provider chooses, and the batch
+// is read back on the main queue once they all have.
+private final class DroppedURLs: @unchecked Sendable {
+    private let lock = NSLock()
+    private var collected: [URL] = []
 
-    var body: some View {
-        LabeledContent {
-            Button(isoFile == nil ? "Choose…" : "Change…", action: onSelect)
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: "opticaldisc.fill")
-                    .font(.title2)
-                    .foregroundStyle(isoFile == nil ? Color.secondary : Color.accentColor)
+    func append(_ url: URL) {
+        lock.lock()
+        defer { lock.unlock() }
+        collected.append(url)
+    }
 
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(isoFile?.name ?? "No ISO selected")
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-
-                    Text(isoFile?.sizeFormatted ?? "Or drag an ISO file anywhere onto this window.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
+    var urls: [URL] {
+        lock.lock()
+        defer { lock.unlock() }
+        return collected
     }
 }
 

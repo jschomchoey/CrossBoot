@@ -27,6 +27,13 @@
 		020 /* AutounattendTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 121 /* AutounattendTests.swift */; };
 		021 /* ProcessStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 122 /* ProcessStateTests.swift */; };
 		022 /* WindowSizingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 123 /* WindowSizingTests.swift */; };
+		030 /* WindowsImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 130 /* WindowsImage.swift */; };
+		031 /* InstallMediaPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = 131 /* InstallMediaPlan.swift */; };
+		032 /* WimXMLParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 132 /* WimXMLParser.swift */; };
+		033 /* ISOListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 133 /* ISOListView.swift */; };
+		034 /* MediaPlanTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 134 /* MediaPlanTests.swift */; };
+		035 /* WimXMLParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 135 /* WimXMLParserTests.swift */; };
+		036 /* MediaBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 136 /* MediaBuilder.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -53,6 +60,13 @@
 		121 /* AutounattendTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutounattendTests.swift; sourceTree = "<group>"; };
 		122 /* ProcessStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessStateTests.swift; sourceTree = "<group>"; };
 		123 /* WindowSizingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowSizingTests.swift; sourceTree = "<group>"; };
+		130 /* WindowsImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowsImage.swift; sourceTree = "<group>"; };
+		131 /* InstallMediaPlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstallMediaPlan.swift; sourceTree = "<group>"; };
+		132 /* WimXMLParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WimXMLParser.swift; sourceTree = "<group>"; };
+		133 /* ISOListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ISOListView.swift; sourceTree = "<group>"; };
+		134 /* MediaPlanTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaPlanTests.swift; sourceTree = "<group>"; };
+		135 /* WimXMLParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WimXMLParserTests.swift; sourceTree = "<group>"; };
+		136 /* MediaBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaBuilder.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -113,6 +127,8 @@
 				104 /* Drive.swift */,
 				105 /* ISOFile.swift */,
 				106 /* ProcessState.swift */,
+				131 /* InstallMediaPlan.swift */,
+				130 /* WindowsImage.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -126,6 +142,8 @@
 				C0D780252F2F0C6F00912BB1 /* PowerAssertionManager.swift */,
 				109 /* WimLibService.swift */,
 				110 /* ShellHelper.swift */,
+				136 /* MediaBuilder.swift */,
+				132 /* WimXMLParser.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -143,6 +161,7 @@
 			children = (
 				102 /* ContentView.swift */,
 				C0E5B9112F2E5B4400869CAF /* DriveSelectorView.swift */,
+				133 /* ISOListView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -162,6 +181,8 @@
 				121 /* AutounattendTests.swift */,
 				122 /* ProcessStateTests.swift */,
 				123 /* WindowSizingTests.swift */,
+				134 /* MediaPlanTests.swift */,
+				135 /* WimXMLParserTests.swift */,
 			);
 			path = CrossBootTests;
 			sourceTree = "<group>";
@@ -289,6 +310,11 @@
 				011 /* CrossBootViewModel.swift in Sources */,
 				013 /* Log.swift in Sources */,
 				014 /* ByteCount.swift in Sources */,
+				030 /* WindowsImage.swift in Sources */,
+				031 /* InstallMediaPlan.swift in Sources */,
+				032 /* WimXMLParser.swift in Sources */,
+				033 /* ISOListView.swift in Sources */,
+				036 /* MediaBuilder.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -300,6 +326,8 @@
 				020 /* AutounattendTests.swift in Sources */,
 				021 /* ProcessStateTests.swift in Sources */,
 				022 /* WindowSizingTests.swift in Sources */,
+				034 /* MediaPlanTests.swift in Sources */,
+				035 /* WimXMLParserTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
