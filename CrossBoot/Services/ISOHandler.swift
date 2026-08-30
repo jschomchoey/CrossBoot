@@ -99,8 +99,12 @@ actor ISOHandler {
         }
         
         let totalBytes = filesToCopy.reduce(0) { $0 + $1.size }
+        guard totalBytes > 0 else {
+            throw ISOError.emptySource
+        }
+
         var copiedBytes: Int64 = 0
-        
+
         let fileManager = FileManager.default
         let bufferSize = 32 * 1024 * 1024 // 32MB buffer
         
@@ -143,23 +147,55 @@ actor ISOHandler {
             
             while inputStream.hasBytesAvailable {
                 try Task.checkCancellation()
-                
+
                 let bytesRead = inputStream.read(&buffer, maxLength: bufferSize)
-                if bytesRead > 0 {
-                    outputStream.write(buffer, maxLength: bytesRead)
-                    copiedBytes += Int64(bytesRead)
-                    
-                    let progress = min(100, Double(copiedBytes) / Double(totalBytes) * 100)
-                    await MainActor.run {
-                        onProgress(progress, fileName)
-                    }
-                } else if bytesRead < 0 {
-                    throw ISOError.copyFailed("Read error: \(fileName)")
+                guard bytesRead != 0 else { break }
+                guard bytesRead > 0 else {
+                    throw ISOError.readFailed(
+                        file: fileName,
+                        reason: inputStream.streamError?.localizedDescription
+                    )
+                }
+
+                try write(buffer, count: bytesRead, to: outputStream, fileName: fileName)
+                copiedBytes += Int64(bytesRead)
+
+                let progress = min(100, Double(copiedBytes) / Double(totalBytes) * 100)
+                await MainActor.run {
+                    onProgress(progress, fileName)
                 }
             }
         }
     }
     
+    // OutputStream accepts fewer bytes than offered once the destination fills
+    // up. Ignoring the count silently truncates files and still reports success,
+    // so keep writing until the whole chunk lands.
+    private func write(
+        _ buffer: [UInt8],
+        count: Int,
+        to stream: OutputStream,
+        fileName: String
+    ) throws {
+        var written = 0
+
+        while written < count {
+            let result = buffer.withUnsafeBufferPointer { pointer -> Int in
+                guard let base = pointer.baseAddress else { return -1 }
+                return stream.write(base + written, maxLength: count - written)
+            }
+
+            guard result > 0 else {
+                throw ISOError.writeFailed(
+                    file: fileName,
+                    reason: stream.streamError?.localizedDescription
+                )
+            }
+
+            written += result
+        }
+    }
+
     /// Create autounattend.xml for Windows 11 bypass
     func createAutounattend(
         at usbPath: String,
@@ -251,13 +287,25 @@ actor ISOHandler {
 enum ISOError: LocalizedError {
     case mountFailed
     case enumerationFailed
+    case emptySource
     case copyFailed(String)
-    
+    case readFailed(file: String, reason: String?)
+    case writeFailed(file: String, reason: String?)
+
     var errorDescription: String? {
         switch self {
-        case .mountFailed: return "Failed to mount ISO"
-        case .enumerationFailed: return "Failed to enumerate files"
-        case .copyFailed(let msg): return msg
+        case .mountFailed:
+            return "Failed to mount ISO"
+        case .enumerationFailed:
+            return "Failed to enumerate files"
+        case .emptySource:
+            return "The ISO contains no files to copy"
+        case .copyFailed(let message):
+            return message
+        case .readFailed(let file, let reason):
+            return "Failed to read \(file): \(reason ?? "the ISO may be damaged")"
+        case .writeFailed(let file, let reason):
+            return "Failed to write \(file): \(reason ?? "the drive may be full or disconnected")"
         }
     }
 }

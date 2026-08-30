@@ -86,19 +86,27 @@ class CrossBootViewModel: ObservableObject {
     func createBootableUSB() {
         currentTask = Task {
             await performCreateBootableUSB()
+            currentTask = nil
         }
     }
-    
+
     func abortProcess() {
+        guard let task = currentTask else { return }
+
         processState.stage = .aborting
-        
-        currentTask?.cancel()
-        currentTask = nil
-        
+        task.cancel()
+
         Task {
-            await isoHandler.cleanup()
-            await powerAssertion.releaseAssertion()
+            // Wait for the run to unwind and release its resources; setting the
+            // state before that lets a late progress callback overwrite it.
+            await task.value
             processState = ProcessState(stage: .aborted, progress: 0)
+
+            showAlert(
+                title: "Aborted",
+                message: "The process stopped before finishing, so the drive is not bootable. Run it again to complete the drive.",
+                style: .warning
+            )
         }
     }
     
@@ -124,14 +132,7 @@ class CrossBootViewModel: ObservableObject {
             print("⚠️ Failed to create power assertion: \(error.localizedDescription)")
             // Continue anyway - this is not fatal
         }
-        
-        // Ensure power assertion is released in all code paths
-        defer {
-            Task {
-                await powerAssertion.releaseAssertion()
-            }
-        }
-        
+
         do {
             // Check before erasing rather than filling the drive and failing
             // partway through the copy.
@@ -222,18 +223,29 @@ class CrossBootViewModel: ObservableObject {
             )
             
         } catch is CancellationError {
+            // abortProcess owns the aborted state once this run has unwound.
+            await releaseResources()
             return
         } catch {
+            await releaseResources()
+
             processState.stage = .error(error.localizedDescription)
             showAlert(
                 title: "Error",
                 message: error.localizedDescription,
                 style: .critical
             )
+            return
         }
-        
-        // Cleanup
+
+        await releaseResources()
+    }
+
+    // Every exit path from a run releases what the run acquired; `defer` cannot
+    // await, and deferring a detached Task made the ordering unpredictable.
+    private func releaseResources() async {
         await isoHandler.cleanup()
+        await powerAssertion.releaseAssertion()
     }
     
     // MARK: - Helpers
