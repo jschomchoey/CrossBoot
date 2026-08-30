@@ -1,0 +1,47 @@
+# Run with `swiftlint` from the repository root (brew install swiftlint).
+included:
+  - CrossBoot
+  - CrossBootTests
+
+excluded:
+  - CrossBoot/Resources
+
+disabled_rules:
+  - todo
+
+opt_in_rules:
+  - empty_count
+  - explicit_init
+  - first_where
+  - force_unwrapping
+  - implicitly_unwrapped_optional
+  - last_where
+  - redundant_nil_coalescing
+  - sorted_first_last
+  - toggle_bool
+  - unneeded_parentheses_in_closure_argument
+
+line_length:
+  warning: 140
+  error: 200
+  ignores_comments: true
+
+type_body_length:
+  warning: 300
+  error: 400
+
+file_length:
+  warning: 400
+  error: 600
+
+function_body_length:
+  warning: 80
+  error: 120
+
+identifier_name:
+  min_length: 2
+  excluded: [id, x, y]
+
+# Views carry long declarative bodies; nesting depth is what matters there.
+cyclomatic_complexity:
+  warning: 12

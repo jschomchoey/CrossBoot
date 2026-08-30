@@ -18,14 +18,15 @@
 		009 /* WimLibService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 109 /* WimLibService.swift */; };
 		010 /* ShellHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = 110 /* ShellHelper.swift */; };
 		011 /* CrossBootViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 111 /* CrossBootViewModel.swift */; };
-		012 /* ISODropZoneView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 112 /* ISODropZoneView.swift */; };
 		C0D780262F2F0C6F00912BB1 /* PowerAssertionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0D780252F2F0C6F00912BB1 /* PowerAssertionManager.swift */; };
 		C0E5B9122F2E5B4400869CAF /* DriveSelectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0E5B9112F2E5B4400869CAF /* DriveSelectorView.swift */; };
 		C0F6D4472F2E574B00C5A647 /* wimlib-imagex in Resources */ = {isa = PBXBuildFile; fileRef = C0F6D4462F2E574B00C5A647 /* wimlib-imagex */; };
 		013 /* Log.swift in Sources */ = {isa = PBXBuildFile; fileRef = 115 /* Log.swift */; };
 		014 /* ByteCount.swift in Sources */ = {isa = PBXBuildFile; fileRef = 116 /* ByteCount.swift */; };
-		015 /* NativeButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 117 /* NativeButton.swift */; };
-		016 /* ProgressSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 118 /* ProgressSection.swift */; };
+		019 /* DiskParsingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 120 /* DiskParsingTests.swift */; };
+		020 /* AutounattendTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 121 /* AutounattendTests.swift */; };
+		021 /* ProcessStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 122 /* ProcessStateTests.swift */; };
+		022 /* WindowSizingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 123 /* WindowSizingTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -41,19 +42,28 @@
 		109 /* WimLibService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WimLibService.swift; sourceTree = "<group>"; };
 		110 /* ShellHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShellHelper.swift; sourceTree = "<group>"; };
 		111 /* CrossBootViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrossBootViewModel.swift; sourceTree = "<group>"; };
-		112 /* ISODropZoneView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ISODropZoneView.swift; sourceTree = "<group>"; };
 		114 /* CrossBoot.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = CrossBoot.entitlements; sourceTree = "<group>"; };
 		C0D780252F2F0C6F00912BB1 /* PowerAssertionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PowerAssertionManager.swift; sourceTree = "<group>"; };
 		C0E5B9112F2E5B4400869CAF /* DriveSelectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveSelectorView.swift; sourceTree = "<group>"; };
 		C0F6D4462F2E574B00C5A647 /* wimlib-imagex */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.executable"; path = "wimlib-imagex"; sourceTree = "<group>"; };
 		115 /* Log.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Log.swift; sourceTree = "<group>"; };
 		116 /* ByteCount.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ByteCount.swift; sourceTree = "<group>"; };
-		117 /* NativeButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeButton.swift; sourceTree = "<group>"; };
-		118 /* ProgressSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressSection.swift; sourceTree = "<group>"; };
+		119 /* CrossBootTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CrossBootTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		120 /* DiskParsingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiskParsingTests.swift; sourceTree = "<group>"; };
+		121 /* AutounattendTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutounattendTests.swift; sourceTree = "<group>"; };
+		122 /* ProcessStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessStateTests.swift; sourceTree = "<group>"; };
+		123 /* WindowSizingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowSizingTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		200 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		412 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -67,6 +77,7 @@
 			isa = PBXGroup;
 			children = (
 				301 /* CrossBoot */,
+				307 /* CrossBootTests */,
 				302 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -90,6 +101,7 @@
 			isa = PBXGroup;
 			children = (
 				100 /* CrossBoot.app */,
+				119 /* CrossBootTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -129,10 +141,7 @@
 		306 /* Views */ = {
 			isa = PBXGroup;
 			children = (
-				118 /* ProgressSection.swift */,
-				117 /* NativeButton.swift */,
 				102 /* ContentView.swift */,
-				112 /* ISODropZoneView.swift */,
 				C0E5B9112F2E5B4400869CAF /* DriveSelectorView.swift */,
 			);
 			path = Views;
@@ -144,6 +153,17 @@
 				C0F6D4462F2E574B00C5A647 /* wimlib-imagex */,
 			);
 			path = Resources;
+			sourceTree = "<group>";
+		};
+		307 /* CrossBootTests */ = {
+			isa = PBXGroup;
+			children = (
+				120 /* DiskParsingTests.swift */,
+				121 /* AutounattendTests.swift */,
+				122 /* ProcessStateTests.swift */,
+				123 /* WindowSizingTests.swift */,
+			);
+			path = CrossBootTests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -166,7 +186,35 @@
 			productReference = 100 /* CrossBoot.app */;
 			productType = "com.apple.product-type.application";
 		};
+		410 /* CrossBootTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 502 /* Build configuration list for PBXNativeTarget "CrossBootTests" */;
+			buildPhases = (
+				411 /* Sources */,
+				412 /* Frameworks */,
+				413 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				801 /* PBXTargetDependency */,
+			);
+			name = CrossBootTests;
+			productName = CrossBootTests;
+			productReference = 119 /* CrossBootTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
+
+/* Begin PBXContainerItemProxy section */
+		800 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 600 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 400;
+			remoteInfo = CrossBoot;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXProject section */
 		600 /* Project object */ = {
@@ -178,6 +226,9 @@
 				TargetAttributes = {
 					400 = {
 						CreatedOnToolsVersion = 15.0;
+					};
+					410 = {
+						TestTargetID = 400;
 					};
 				};
 			};
@@ -195,6 +246,7 @@
 			projectRoot = "";
 			targets = (
 				400 /* CrossBoot */,
+				410 /* CrossBootTests */,
 			);
 		};
 /* End PBXProject section */
@@ -206,6 +258,13 @@
 			files = (
 				003 /* Assets.xcassets in Resources */,
 				C0F6D4472F2E574B00C5A647 /* wimlib-imagex in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		413 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -228,15 +287,31 @@
 				009 /* WimLibService.swift in Sources */,
 				010 /* ShellHelper.swift in Sources */,
 				011 /* CrossBootViewModel.swift in Sources */,
-				012 /* ISODropZoneView.swift in Sources */,
 				013 /* Log.swift in Sources */,
 				014 /* ByteCount.swift in Sources */,
-				015 /* NativeButton.swift in Sources */,
-				016 /* ProgressSection.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		411 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				019 /* DiskParsingTests.swift in Sources */,
+				020 /* AutounattendTests.swift in Sources */,
+				021 /* ProcessStateTests.swift in Sources */,
+				022 /* WindowSizingTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		801 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 400 /* CrossBoot */;
+			targetProxy = 800 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		700 /* Debug */ = {
@@ -292,11 +367,12 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 11.0;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
+				SWIFT_STRICT_CONCURRENCY = complete;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -350,10 +426,11 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 11.0;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = macosx;
+				SWIFT_STRICT_CONCURRENCY = complete;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 			};
@@ -372,7 +449,7 @@
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_ASSET_PATHS = "";
 				ENABLE_APP_SANDBOX = NO;
-				ENABLE_HARDENED_RUNTIME = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -409,7 +486,7 @@
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_ASSET_PATHS = "";
 				ENABLE_APP_SANDBOX = NO;
-				ENABLE_HARDENED_RUNTIME = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -433,6 +510,42 @@
 			};
 			name = Release;
 		};
+		704 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.crossboot.app.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CrossBoot.app/Contents/MacOS/CrossBoot";
+			};
+			name = Debug;
+		};
+		705 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.crossboot.app.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CrossBoot.app/Contents/MacOS/CrossBoot";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -450,6 +563,15 @@
 			buildConfigurations = (
 				700 /* Debug */,
 				701 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		502 /* Build configuration list for PBXNativeTarget "CrossBootTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				704 /* Debug */,
+				705 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

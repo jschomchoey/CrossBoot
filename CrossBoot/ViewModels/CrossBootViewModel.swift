@@ -12,6 +12,10 @@ class CrossBootViewModel: ObservableObject {
     @Published var bypassOnlineAccount = false
     @Published var processState = ProcessState()
     @Published var isScanning = false
+
+    // Bad input and scan failures keep the user on the setup form; only a run
+    // that actually started can finish in a failed state.
+    @Published var inputError: String?
     
     // MARK: - Services
     private let diskManager = DiskManager.shared
@@ -31,7 +35,7 @@ class CrossBootViewModel: ObservableObject {
     }
 
     // Rescales a stage's own 0-100 progress into its slice of the overall bar.
-    private static func overallProgress(_ stageProgress: Double, from start: Double, to end: Double) -> Double {
+    static func overallProgress(_ stageProgress: Double, from start: Double, to end: Double) -> Double {
         start + stageProgress / 100 * (end - start)
     }
     
@@ -56,11 +60,12 @@ class CrossBootViewModel: ObservableObject {
 
         do {
             drives = try await diskManager.listRemovableDrives()
+            inputError = nil
         } catch {
             // Without this the UI just says "No USB Drive Found" and hides why.
             drives = []
             Log.disk.error("Failed to list drives: \(error.localizedDescription, privacy: .public)")
-            processState = .failed("Could not list drives: \(error.localizedDescription)")
+            inputError = "Could not list drives: \(error.localizedDescription)"
         }
         
         // Match on the whole drive, not just its identifier: identifiers are
@@ -92,7 +97,7 @@ class CrossBootViewModel: ObservableObject {
         guard let url = urls.first else { return }
 
         guard url.pathExtension.lowercased() == "iso" else {
-            processState = .failed("\(url.lastPathComponent) is not an ISO file")
+            inputError = "\(url.lastPathComponent) is not an ISO file"
             return
         }
 
@@ -102,8 +107,10 @@ class CrossBootViewModel: ObservableObject {
     private func handleISOSelection(_ url: URL) {
         do {
             isoFile = try ISOFile(url: url)
+            inputError = nil
+            processState = ProcessState()
         } catch {
-            processState = .failed("Failed to read ISO: \(error.localizedDescription)")
+            inputError = "Failed to read ISO: \(error.localizedDescription)"
         }
     }
     
@@ -127,12 +134,6 @@ class CrossBootViewModel: ObservableObject {
             // state before that lets a late progress callback overwrite it.
             await task.value
             processState = ProcessState(stage: .aborted, progress: 0)
-
-            showAlert(
-                title: "Aborted",
-                message: "The process stopped before finishing, so the drive is not bootable. Run it again to complete the drive.",
-                style: .warning
-            )
         }
     }
     
@@ -184,13 +185,11 @@ class CrossBootViewModel: ObservableObject {
                 processState.stage = .splitting
 
                 let tempDir = try await wimLibService.splitWIM(wim) { [weak self] percent in
-                    Task { @MainActor in
-                        self?.processState.progress = Self.overallProgress(
-                            Double(percent),
-                            from: Milestone.formatted,
-                            to: Milestone.split
-                        )
-                    }
+                    self?.processState.progress = Self.overallProgress(
+                        Double(percent),
+                        from: Milestone.formatted,
+                        to: Milestone.split
+                    )
                 }
 
                 splitTempDir = tempDir
@@ -227,13 +226,13 @@ class CrossBootViewModel: ObservableObject {
             }
             
             processState = ProcessState(stage: .done, progress: 100)
-            
+
             showAlert(
                 title: "Success",
-                message: "Bootable USB created successfully!",
+                message: "The drive is ready. You can eject it and boot from it.",
                 style: .informational
             )
-            
+
         } catch is CancellationError {
             // abortProcess owns the aborted state once this run has unwound.
             await releaseResources()
@@ -243,7 +242,7 @@ class CrossBootViewModel: ObservableObject {
 
             processState = .failed(error.localizedDescription)
             showAlert(
-                title: "Error",
+                title: "Could not finish",
                 message: error.localizedDescription,
                 style: .critical
             )
@@ -265,7 +264,7 @@ class CrossBootViewModel: ObservableObject {
     var canStart: Bool {
         selectedDrive != nil && isoFile != nil && !processState.isProcessing
     }
-    
+
     private func showAlert(title: String, message: String, style: NSAlert.Style) {
         let alert = NSAlert()
         alert.messageText = title
@@ -274,6 +273,7 @@ class CrossBootViewModel: ObservableObject {
         alert.addButton(withTitle: "OK")
         alert.runModal()
     }
+
     
     /// Show confirmation dialog
     func confirmErase() -> Bool {

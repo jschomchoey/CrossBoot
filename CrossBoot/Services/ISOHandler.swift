@@ -83,7 +83,7 @@ actor ISOHandler {
         to usbPath: String,
         splitTempDir: URL?,
         skipInstallWim: Bool,
-        onProgress: @escaping (Double, String) -> Void
+        onProgress: @escaping @Sendable @MainActor (Double, String) -> Void
     ) async throws {
         var filesToCopy = try getAllFiles(mountPoint)
         
@@ -161,9 +161,7 @@ actor ISOHandler {
                 copiedBytes += Int64(bytesRead)
 
                 let progress = min(100, Double(copiedBytes) / Double(totalBytes) * 100)
-                await MainActor.run {
-                    onProgress(progress, fileName)
-                }
+                await onProgress(progress, fileName)
             }
         }
     }

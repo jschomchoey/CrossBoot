@@ -18,7 +18,7 @@ A simple tool for creating Windows bootable USB drives on macOS.
 
 ## Requirements
 
-- macOS 11 or later
+- macOS 13 or later
 - Mac Apple Silicon or Intel
 - Windows ISO file
 - USB drive (8GB or larger recommended)

@@ -11,7 +11,7 @@ actor WimLibService {
     private static let partSizeMB = 3800
 
     // Split WIM file
-    func splitWIM(_ wimPath: String, onProgress: @escaping (Int) -> Void) async throws -> URL {
+    func splitWIM(_ wimPath: String, onProgress: @escaping @Sendable @MainActor (Int) -> Void) async throws -> URL {
         guard let wimlibPath = Bundle.main.path(forResource: "wimlib-imagex", ofType: nil) else {
             throw WimLibError.binaryNotFound
         }

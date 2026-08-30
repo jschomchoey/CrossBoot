@@ -13,34 +13,26 @@ actor DiskManager {
     private init() {}
 
     // Start monitoring disk changes
-    func startMonitoring(onChange: @escaping () -> Void) {
-        Task.detached { [weak self] in
-            guard let session = DASessionCreate(kCFAllocatorDefault) else { return }
-            await self?.setSession(session)
+    func startMonitoring(onChange: @escaping @Sendable () -> Void) {
+        guard diskSession == nil, let session = DASessionCreate(kCFAllocatorDefault) else { return }
 
-            DASessionSetDispatchQueue(session, DispatchQueue.main)
-
-            // Register for disk appeared events
-            DARegisterDiskAppearedCallback(session, nil, { disk, context in
-                guard let context = context else { return }
-                let manager = Unmanaged<DiskChangeHandler>.fromOpaque(context).takeUnretainedValue()
-                manager.handleChange()
-            }, Unmanaged.passUnretained(DiskChangeHandler.shared).toOpaque())
-
-            // Register for disk disappeared events
-            DARegisterDiskDisappearedCallback(session, nil, { disk, context in
-                guard let context = context else { return }
-                let manager = Unmanaged<DiskChangeHandler>.fromOpaque(context).takeUnretainedValue()
-                manager.handleChange()
-            }, Unmanaged.passUnretained(DiskChangeHandler.shared).toOpaque())
-
-            guard let self = self else { return }
-            DiskChangeHandler.shared.setHandler(onChange, owner: self)
-        }
-    }
-
-    private func setSession(_ session: DASession) {
         diskSession = session
+        DiskChangeHandler.shared.setHandler(onChange)
+
+        // Disk Arbitration hands the context back to a C callback, so the
+        // handler has to be reachable through a raw pointer.
+        let context = Unmanaged.passUnretained(DiskChangeHandler.shared).toOpaque()
+        DASessionSetDispatchQueue(session, DispatchQueue.main)
+
+        DARegisterDiskAppearedCallback(session, nil, { _, context in
+            guard let context else { return }
+            Unmanaged<DiskChangeHandler>.fromOpaque(context).takeUnretainedValue().handleChange()
+        }, context)
+
+        DARegisterDiskDisappearedCallback(session, nil, { _, context in
+            guard let context else { return }
+            Unmanaged<DiskChangeHandler>.fromOpaque(context).takeUnretainedValue().handleChange()
+        }, context)
     }
 
     // List all removable USB drives
@@ -65,7 +57,7 @@ actor DiskManager {
     }
 
     // Extract the disk identifiers from `diskutil list -plist`
-    private static func parseDiskIdentifiers(_ plistString: String) -> [String] {
+    static func parseDiskIdentifiers(_ plistString: String) -> [String] {
         guard let data = plistString.data(using: .utf8),
               let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
               let allDisks = plist["AllDisksAndPartitions"] as? [[String: Any]] else {
@@ -162,34 +154,40 @@ actor DiskManager {
     }
 }
 
-// Helper class for disk change callbacks
-class DiskChangeHandler {
+// Bridges Disk Arbitration's C callbacks back into Swift. `@unchecked Sendable`
+// is sound because the lock guards every stored property.
+final class DiskChangeHandler: @unchecked Sendable {
     static let shared = DiskChangeHandler()
-    private weak var handlerOwner: AnyObject?
-    private var onChange: (() -> Void)?
+
+    // Replugging a hub emits a burst of events; coalesce them into one refresh.
+    private static let debounceInterval: TimeInterval = 0.5
+
+    private let lock = NSLock()
+    private var onChange: (@Sendable () -> Void)?
     private var debounceWorkItem: DispatchWorkItem?
 
-    func setHandler(_ handler: @escaping () -> Void, owner: AnyObject) {
-        handlerOwner = owner
+    private init() {}
+
+    func setHandler(_ handler: @escaping @Sendable () -> Void) {
+        lock.lock()
+        defer { lock.unlock() }
         onChange = handler
     }
 
     func handleChange() {
-        guard handlerOwner != nil else {
-            onChange = nil
+        lock.lock()
+        guard let handler = onChange else {
+            lock.unlock()
             return
         }
 
-        // Debounce rapid changes
         debounceWorkItem?.cancel()
-        let workItem = DispatchWorkItem { [weak self] in
-            guard self?.handlerOwner != nil else { return }
-            self?.onChange?()
-        }
+        let workItem = DispatchWorkItem(block: handler)
         debounceWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: workItem)
-    }
+        lock.unlock()
 
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.debounceInterval, execute: workItem)
+    }
 }
 
 enum DiskError: LocalizedError {
