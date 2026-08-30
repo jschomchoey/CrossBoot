@@ -6,13 +6,16 @@ actor WimLibService {
     
     private init() {}
     
-    // Get path to bundled wimlib-imagex
-    private var wimlibPath: String {
-        Bundle.main.path(forResource: "wimlib-imagex", ofType: nil) ?? "/usr/local/bin/wimlib-imagex"
-    }
-    
+    // FAT32 caps a single file at 4 GiB; the margin leaves room for the
+    // per-part headers wimlib writes.
+    private static let partSizeMB = 3800
+
     // Split WIM file
     func splitWIM(_ wimPath: String, onProgress: @escaping (Int) -> Void) async throws -> URL {
+        guard let wimlibPath = Bundle.main.path(forResource: "wimlib-imagex", ofType: nil) else {
+            throw WimLibError.binaryNotFound
+        }
+
         // Create temp directory
         let tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("crossboot-\(UUID().uuidString)")
@@ -24,7 +27,7 @@ actor WimLibService {
         let pipe = Pipe()
         
         process.executableURL = URL(fileURLWithPath: wimlibPath)
-        process.arguments = ["split", wimPath, outputPath, "3800"]
+        process.arguments = ["split", wimPath, outputPath, String(Self.partSizeMB)]
         process.standardOutput = pipe
         process.standardError = pipe
         

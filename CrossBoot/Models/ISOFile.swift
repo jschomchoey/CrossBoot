@@ -7,8 +7,7 @@ struct ISOFile {
     let sizeBytes: Int64
     
     var sizeFormatted: String {
-        let gb = Double(sizeBytes) / (1000 * 1000 * 1000)
-        return String(format: "%.2f GB", gb)
+        sizeBytes.formattedSize
     }
     
     init(url: URL) throws {

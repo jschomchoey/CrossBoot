@@ -34,7 +34,7 @@ actor PowerAssertionManager {
         }
         
         isActive = true
-        print("Power assertion created (ID: \(assertionID)): \(reason)")
+        Log.power.debug("Power assertion created (ID: \(self.assertionID))")
     }
     
     /// Release the active power assertion
@@ -47,20 +47,15 @@ actor PowerAssertionManager {
         let result = IOPMAssertionRelease(assertionID)
         
         if result == kIOReturnSuccess {
-            print("Power assertion released (ID: \(assertionID))")
+            Log.power.debug("Power assertion released (ID: \(self.assertionID))")
         } else {
-            print("Failed to release power assertion (ID: \(assertionID)): \(result)")
+            Log.power.error("Failed to release power assertion (ID: \(self.assertionID)): \(result)")
         }
         
         isActive = false
         assertionID = IOPMAssertionID(0)
     }
-    
-    /// Check if an assertion is currently active
-    var hasActiveAssertion: Bool {
-        isActive
     }
-}
 
 enum PowerAssertionError: LocalizedError {
     case creationFailed(IOReturn)

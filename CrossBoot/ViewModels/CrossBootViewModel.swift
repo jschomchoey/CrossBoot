@@ -20,6 +20,19 @@ class CrossBootViewModel: ObservableObject {
     
     // MARK: - Task Management
     private var currentTask: Task<Void, Never>?
+
+    // Points on the overall progress bar where each stage hands over to the next.
+    private enum Milestone {
+        static let formatStarted: Double = 2
+        static let formatted: Double = 5
+        static let split: Double = 15
+        static let copied: Double = 99
+    }
+
+    // Rescales a stage's own 0-100 progress into its slice of the overall bar.
+    private static func overallProgress(_ stageProgress: Double, from start: Double, to end: Double) -> Double {
+        start + stageProgress / 100 * (end - start)
+    }
     
     // MARK: - Initialization
     
@@ -121,16 +134,14 @@ class CrossBootViewModel: ObservableObject {
             return
         }
         
-        var hasSplit = false
         var splitTempDir: URL?
-        var mountPoint: String?
-        
+
         // Create power assertion to prevent system sleep during USB creation
         do {
             try await powerAssertion.createAssertion(reason: "Creating Windows bootable USB")
         } catch {
-            print("⚠️ Failed to create power assertion: \(error.localizedDescription)")
-            // Continue anyway - this is not fatal
+            // Not fatal; the run continues without sleep protection.
+            Log.process.error("Failed to create power assertion: \(error.localizedDescription, privacy: .public)")
         }
 
         do {
@@ -140,72 +151,60 @@ class CrossBootViewModel: ObservableObject {
                 throw DiskError.insufficientSpace(required: iso.sizeBytes, available: drive.size)
             }
 
-            processState = ProcessState(stage: .formatting, progress: 2)
+            processState = ProcessState(stage: .formatting, progress: Milestone.formatStarted)
             try await diskManager.formatDrive(drive)
-            
+
             try Task.checkCancellation()
-            processState.progress = 5
-            
+            processState.progress = Milestone.formatted
+
             guard let usbPath = await diskManager.getMountPoint(drive.device) else {
                 throw DiskError.mountPointNotFound
             }
-            
+
             processState.stage = .analyzing
-            mountPoint = try await isoHandler.mountISO(iso.url)
-            
-            guard let safeMountPoint = mountPoint else {
-                throw ISOError.mountFailed
-            }
-            let (needsSplit, wimPath) = await isoHandler.checkWIMSize(safeMountPoint)
-            
+            let mountPoint = try await isoHandler.mountISO(iso.url)
+            let (needsSplit, wimPath) = await isoHandler.checkWIMSize(mountPoint)
+
             try Task.checkCancellation()
-            
+
             if needsSplit, let wim = wimPath {
                 processState.stage = .splitting
-                hasSplit = true
-                
-                splitTempDir = try await wimLibService.splitWIM(wim) { [weak self] percent in
+
+                let tempDir = try await wimLibService.splitWIM(wim) { [weak self] percent in
                     Task { @MainActor in
-                        // Split: 5% -> 15%
-                        self?.processState.progress = 5 + Double(percent) * 0.1
+                        self?.processState.progress = Self.overallProgress(
+                            Double(percent),
+                            from: Milestone.formatted,
+                            to: Milestone.split
+                        )
                     }
                 }
-                
-                guard let tempDir = splitTempDir else {
-                    throw ISOError.copyFailed("Split temporary directory not found")
-                }
-                
+
+                splitTempDir = tempDir
                 await isoHandler.setTempDirectory(tempDir)
             }
-            
+
             processState.stage = .copying
-            
-            guard let sourceMount = mountPoint else {
-                throw ISOError.mountFailed
-            }
-            
+
+            // Copying picks up wherever the previous stage left off.
+            let copyStart = splitTempDir == nil ? Milestone.formatted : Milestone.split
+
             try await isoHandler.copyFilesToUSB(
-                from: sourceMount,
+                from: mountPoint,
                 to: usbPath,
                 splitTempDir: splitTempDir,
-                skipInstallWim: hasSplit
+                skipInstallWim: splitTempDir != nil
             ) { [weak self] progress, fileName in
                 guard let self = self else { return }
-                
-                // Adjust progress 
-                let adjusted: Double
-                if hasSplit {
-                    // Split happened: 15% -> 99%
-                    adjusted = 15 + progress * 0.84
-                } else {
-                    // No split: 5% -> 99%
-                    adjusted = 5 + progress * 0.94
-                }
-                
-                self.processState.progress = adjusted
+
+                self.processState.progress = Self.overallProgress(
+                    progress,
+                    from: copyStart,
+                    to: Milestone.copied
+                )
                 self.processState.currentFile = fileName
             }
-            
+
             if bypassRequirements || bypassOnlineAccount {
                 try await isoHandler.createAutounattend(
                     at: usbPath,

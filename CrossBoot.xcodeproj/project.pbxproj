@@ -22,6 +22,10 @@
 		C0D780262F2F0C6F00912BB1 /* PowerAssertionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0D780252F2F0C6F00912BB1 /* PowerAssertionManager.swift */; };
 		C0E5B9122F2E5B4400869CAF /* DriveSelectorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0E5B9112F2E5B4400869CAF /* DriveSelectorView.swift */; };
 		C0F6D4472F2E574B00C5A647 /* wimlib-imagex in Resources */ = {isa = PBXBuildFile; fileRef = C0F6D4462F2E574B00C5A647 /* wimlib-imagex */; };
+		013 /* Log.swift in Sources */ = {isa = PBXBuildFile; fileRef = 115 /* Log.swift */; };
+		014 /* ByteCount.swift in Sources */ = {isa = PBXBuildFile; fileRef = 116 /* ByteCount.swift */; };
+		015 /* NativeButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 117 /* NativeButton.swift */; };
+		016 /* ProgressSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 118 /* ProgressSection.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -42,6 +46,10 @@
 		C0D780252F2F0C6F00912BB1 /* PowerAssertionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PowerAssertionManager.swift; sourceTree = "<group>"; };
 		C0E5B9112F2E5B4400869CAF /* DriveSelectorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriveSelectorView.swift; sourceTree = "<group>"; };
 		C0F6D4462F2E574B00C5A647 /* wimlib-imagex */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.executable"; path = "wimlib-imagex"; sourceTree = "<group>"; };
+		115 /* Log.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Log.swift; sourceTree = "<group>"; };
+		116 /* ByteCount.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ByteCount.swift; sourceTree = "<group>"; };
+		117 /* NativeButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeButton.swift; sourceTree = "<group>"; };
+		118 /* ProgressSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressSection.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -89,6 +97,7 @@
 		303 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				116 /* ByteCount.swift */,
 				104 /* Drive.swift */,
 				105 /* ISOFile.swift */,
 				106 /* ProcessState.swift */,
@@ -99,6 +108,7 @@
 		304 /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				115 /* Log.swift */,
 				107 /* DiskManager.swift */,
 				108 /* ISOHandler.swift */,
 				C0D780252F2F0C6F00912BB1 /* PowerAssertionManager.swift */,
@@ -119,6 +129,8 @@
 		306 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				118 /* ProgressSection.swift */,
+				117 /* NativeButton.swift */,
 				102 /* ContentView.swift */,
 				112 /* ISODropZoneView.swift */,
 				C0E5B9112F2E5B4400869CAF /* DriveSelectorView.swift */,
@@ -217,6 +229,10 @@
 				010 /* ShellHelper.swift in Sources */,
 				011 /* CrossBootViewModel.swift in Sources */,
 				012 /* ISODropZoneView.swift in Sources */,
+				013 /* Log.swift in Sources */,
+				014 /* ByteCount.swift in Sources */,
+				015 /* NativeButton.swift in Sources */,
+				016 /* ProgressSection.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -7,15 +7,13 @@ actor DiskManager {
 
     private static let diskutil = "/usr/sbin/diskutil"
 
+    // Retained only to keep the Disk Arbitration session alive.
     private var diskSession: DASession?
-    private var onDiskChange: (() -> Void)?
 
     private init() {}
 
     // Start monitoring disk changes
     func startMonitoring(onChange: @escaping () -> Void) {
-        onDiskChange = onChange
-
         Task.detached { [weak self] in
             guard let session = DASessionCreate(kCFAllocatorDefault) else { return }
             await self?.setSession(session)
@@ -45,12 +43,6 @@ actor DiskManager {
         diskSession = session
     }
 
-    // Stop monitoring disk changes
-    func stopMonitoring() {
-        diskSession = nil
-        onDiskChange = nil
-    }
-
     // List all removable USB drives
     func listRemovableDrives() async -> [Drive] {
         do {
@@ -72,7 +64,7 @@ actor DiskManager {
                 return drives.sorted { $0.id.localizedStandardCompare($1.id) == .orderedAscending }
             }
         } catch {
-            print("Failed to list drives: \(error.localizedDescription)")
+            Log.disk.error("Failed to list drives: \(error.localizedDescription, privacy: .public)")
             return []
         }
     }
@@ -139,9 +131,12 @@ actor DiskManager {
         try await ShellHelper.run(Self.diskutil, ["eraseDisk", "MS-DOS", "WINDOWS", "MBR", drive.device])
     }
 
+    // Newly formatted volumes take a moment to appear; back off between tries.
+    private static let mountAttempts = 5
+
     // Get mount point
     func getMountPoint(_ device: String) async -> String? {
-        for attempt in 1...5 {
+        for attempt in 1...Self.mountAttempts {
             try? await Task.sleep(nanoseconds: UInt64(attempt) * 1_000_000_000)
 
             if let mount = await Self.mountPoint(ofDevice: device) {
@@ -154,7 +149,7 @@ actor DiskManager {
                 return mount
             }
 
-            print("Mount point not found, attempt \(attempt)/5...")
+            Log.disk.debug("Mount point not found, attempt \(attempt)/\(Self.mountAttempts)")
         }
 
         return nil
@@ -200,10 +195,6 @@ class DiskChangeHandler {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: workItem)
     }
 
-    func clearHandler() {
-        onChange = nil
-        handlerOwner = nil
-    }
 }
 
 enum DiskError: LocalizedError {
@@ -220,15 +211,11 @@ enum DiskError: LocalizedError {
         case .driveChanged:
             return "The selected drive changed since you chose it. Nothing was erased - refresh the drive list and try again."
         case .insufficientSpace(let required, let available):
-            return "The drive holds \(Self.formatted(available)) but \(Self.formatted(required)) is needed. Nothing was erased."
+            return "The drive holds \(available.formattedSize) but \(required.formattedSize) is needed. Nothing was erased."
         case .infoUnavailable(let device):
             return "Could not read disk information for \(device)"
         case .mountPointNotFound:
             return "Could not find USB mount point"
         }
-    }
-
-    private static func formatted(_ bytes: Int64) -> String {
-        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
     }
 }

@@ -8,7 +8,6 @@ struct Drive: Identifiable, Hashable {
     let size: Int64
     
     var sizeFormatted: String {
-        let gb = Double(size) / 1_000_000_000
-        return String(format: "%.2f GB", gb)
+        size.formattedSize
     }
 }
