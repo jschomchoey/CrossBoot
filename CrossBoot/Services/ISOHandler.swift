@@ -3,30 +3,35 @@ import Foundation
 // Handles ISO mounting, file copying, and WIM operations
 actor ISOHandler {
     static let shared = ISOHandler()
-    
+
+    private static let hdiutil = "/usr/bin/hdiutil"
+
     private var currentMountPoint: String?
     private var tempDirectory: URL?
-    
+
     private init() {}
-    
+
     // Mount an ISO file and return the mount point
     func mountISO(_ isoURL: URL) async throws -> String {
-        let output = try await ShellHelper.run("hdiutil mount -nobrowse \"\(isoURL.path)\"")
-        
-        guard let match = output.range(of: "/Volumes/.+", options: .regularExpression),
-              !output[match].isEmpty else {
+        // -plist keeps this off free-form output: an image can expose several
+        // entities and only some of them carry a mount point.
+        let output = try await ShellHelper.run(Self.hdiutil, ["mount", "-plist", "-nobrowse", isoURL.path])
+
+        guard let data = output.data(using: .utf8),
+              let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+              let entities = plist["system-entities"] as? [[String: Any]],
+              let mountPoint = entities.compactMap({ $0["mount-point"] as? String }).first(where: { !$0.isEmpty }) else {
             throw ISOError.mountFailed
         }
-        
-        let mountPoint = String(output[match]).trimmingCharacters(in: .whitespacesAndNewlines)
+
         currentMountPoint = mountPoint
         return mountPoint
     }
-    
+
     // Unmount the ISO
     func unmountISO() async {
         guard let mountPoint = currentMountPoint else { return }
-        _ = try? await ShellHelper.run("hdiutil detach \"\(mountPoint)\" -force")
+        _ = try? await ShellHelper.run(Self.hdiutil, ["detach", mountPoint, "-force"])
         currentMountPoint = nil
     }
     

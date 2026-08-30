@@ -4,163 +4,163 @@ import DiskArbitration
 // Manages USB drive detection and formatting
 actor DiskManager {
     static let shared = DiskManager()
-    
+
+    private static let diskutil = "/usr/sbin/diskutil"
+
     private var diskSession: DASession?
     private var onDiskChange: (() -> Void)?
-    
+
     private init() {}
-    
+
     // Start monitoring disk changes
     func startMonitoring(onChange: @escaping () -> Void) {
         onDiskChange = onChange
-        
+
         Task.detached { [weak self] in
             guard let session = DASessionCreate(kCFAllocatorDefault) else { return }
             await self?.setSession(session)
-            
+
             DASessionSetDispatchQueue(session, DispatchQueue.main)
-            
+
             // Register for disk appeared events
             DARegisterDiskAppearedCallback(session, nil, { disk, context in
                 guard let context = context else { return }
                 let manager = Unmanaged<DiskChangeHandler>.fromOpaque(context).takeUnretainedValue()
                 manager.handleChange()
             }, Unmanaged.passUnretained(DiskChangeHandler.shared).toOpaque())
-            
+
             // Register for disk disappeared events
             DARegisterDiskDisappearedCallback(session, nil, { disk, context in
                 guard let context = context else { return }
                 let manager = Unmanaged<DiskChangeHandler>.fromOpaque(context).takeUnretainedValue()
                 manager.handleChange()
             }, Unmanaged.passUnretained(DiskChangeHandler.shared).toOpaque())
-            
+
             guard let self = self else { return }
             DiskChangeHandler.shared.setHandler(onChange, owner: self)
         }
     }
-    
+
     private func setSession(_ session: DASession) {
         diskSession = session
     }
-    
+
     // Stop monitoring disk changes
     func stopMonitoring() {
         diskSession = nil
         onDiskChange = nil
     }
-    
+
     // List all removable USB drives
     func listRemovableDrives() async -> [Drive] {
         do {
-            let output = try await ShellHelper.run("diskutil list -plist external physical")
-            return parseDiskutilOutput(output)
+            let output = try await ShellHelper.run(Self.diskutil, ["list", "-plist", "external", "physical"])
+            let identifiers = Self.parseDiskIdentifiers(output)
+
+            // Each disk needs its own `diskutil info`; run them concurrently
+            // rather than blocking on one process at a time.
+            return await withTaskGroup(of: Drive?.self) { group in
+                for identifier in identifiers {
+                    group.addTask { await Self.removableDrive(identifier) }
+                }
+
+                var drives: [Drive] = []
+                for await drive in group {
+                    if let drive { drives.append(drive) }
+                }
+                // Task groups finish out of order; keep the picker order stable.
+                return drives.sorted { $0.id.localizedStandardCompare($1.id) == .orderedAscending }
+            }
         } catch {
-            print("Failed to list drives: \(error)")
+            print("Failed to list drives: \(error.localizedDescription)")
             return []
         }
     }
-    
-    // Parse diskutil plist output to extract drives
-    private func parseDiskutilOutput(_ plistString: String) -> [Drive] {
+
+    // Extract the disk identifiers from `diskutil list -plist`
+    private static func parseDiskIdentifiers(_ plistString: String) -> [String] {
         guard let data = plistString.data(using: .utf8),
               let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
               let allDisks = plist["AllDisksAndPartitions"] as? [[String: Any]] else {
             return []
         }
-        
-        var drives: [Drive] = []
-        
-        for disk in allDisks {
-            guard let deviceIdentifier = disk["DeviceIdentifier"] as? String else { continue }
-            
-            // Get disk info
-            if let info = getDiskInfo(deviceIdentifier) {
-                drives.append(info)
-            }
-        }
-        
-        return drives
+
+        return allDisks.compactMap { $0["DeviceIdentifier"] as? String }
     }
-    
-    // Get detailed info
-    private func getDiskInfo(_ identifier: String) -> Drive? {
+
+    // Describe a disk, or nil when it is not a removable external drive
+    private static func removableDrive(_ identifier: String) async -> Drive? {
         let device = "/dev/\(identifier)"
-        
-        do {
-            let output = try ShellHelper.runSync("diskutil info -plist \(device)")
-            guard let data = output.data(using: .utf8),
-                  let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else {
-                return nil
-            }
-            
-            let removable = plist["Removable"] as? Bool ?? false
-            let ejectable = plist["Ejectable"] as? Bool ?? false
-            let isInternal = plist["Internal"] as? Bool ?? true
-            
-            guard (removable || ejectable) && !isInternal else { return nil }
-            
-            let name = plist["MediaName"] as? String ?? plist["VolumeName"] as? String ?? "USB Drive"
-            let size = plist["TotalSize"] as? Int64 ?? 0
-            
-            return Drive(
-                id: identifier,
-                device: device,
-                name: name.isEmpty ? "USB Drive" : name,
-                size: size
-            )
-        } catch {
-            return nil
-        }
+        guard let info = try? await diskInfo(device) else { return nil }
+
+        let removable = info["Removable"] as? Bool ?? false
+        let ejectable = info["Ejectable"] as? Bool ?? false
+        let isInternal = info["Internal"] as? Bool ?? true
+
+        guard (removable || ejectable) && !isInternal else { return nil }
+
+        let name = (info["MediaName"] as? String ?? info["VolumeName"] as? String ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return Drive(
+            id: identifier,
+            device: device,
+            name: name.isEmpty ? "USB Drive" : name,
+            size: info["TotalSize"] as? Int64 ?? 0
+        )
     }
-    
+
+    // Decoded `diskutil info -plist` for a device
+    static func diskInfo(_ device: String) async throws -> [String: Any] {
+        let output = try await ShellHelper.run(diskutil, ["info", "-plist", device])
+
+        guard let data = output.data(using: .utf8),
+              let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else {
+            throw DiskError.infoUnavailable(device)
+        }
+
+        return plist
+    }
+
     // Format drive to FAT32 with MBR
     func formatDrive(_ device: String) async throws {
         guard !device.contains("disk0") else {
             throw DiskError.systemDiskProtection
         }
-        
-        let command = "diskutil eraseDisk MS-DOS \"WINDOWS\" MBR \"\(device)\""
-        _ = try await ShellHelper.run(command, asAdmin: false)
+
+        try await ShellHelper.run(Self.diskutil, ["eraseDisk", "MS-DOS", "WINDOWS", "MBR", device])
     }
-    
+
     // Get mount point
     func getMountPoint(_ device: String) async -> String? {
         for attempt in 1...5 {
             try? await Task.sleep(nanoseconds: UInt64(attempt) * 1_000_000_000)
-            
-            if let mount = await getMountPointFromDevice(device) {
+
+            if let mount = await Self.mountPoint(ofDevice: device) {
                 return mount
             }
-            
+
             // Also try the first partition
             let diskId = device.replacingOccurrences(of: "/dev/", with: "")
-            let partitionDevice = "/dev/\(diskId)s1"
-            if let mount = await getMountPointFromDevice(partitionDevice) {
+            if let mount = await Self.mountPoint(ofDevice: "/dev/\(diskId)s1") {
                 return mount
             }
-            
+
             print("Mount point not found, attempt \(attempt)/5...")
         }
-        
+
         return nil
     }
-    
+
     // Helper to get mount point from a specific device
-    private func getMountPointFromDevice(_ device: String) async -> String? {
-        do {
-            let output = try await ShellHelper.run("diskutil info -plist \(device)")
-            
-            guard let data = output.data(using: .utf8),
-                  let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
-                  let mountPoint = plist["MountPoint"] as? String,
-                  !mountPoint.isEmpty else {
-                return nil
-            }
-            
-            return mountPoint
-        } catch {
+    private static func mountPoint(ofDevice device: String) async -> String? {
+        guard let info = try? await diskInfo(device),
+              let mountPoint = info["MountPoint"] as? String,
+              !mountPoint.isEmpty else {
             return nil
         }
+
+        return mountPoint
     }
 }
 
@@ -170,61 +170,43 @@ class DiskChangeHandler {
     private weak var handlerOwner: AnyObject?
     private var onChange: (() -> Void)?
     private var debounceWorkItem: DispatchWorkItem?
-    
+
     func setHandler(_ handler: @escaping () -> Void, owner: AnyObject) {
         handlerOwner = owner
         onChange = handler
     }
-    
+
     func handleChange() {
         guard handlerOwner != nil else {
             onChange = nil
             return
         }
-        
+
         // Debounce rapid changes
         debounceWorkItem?.cancel()
-        debounceWorkItem = DispatchWorkItem { [weak self] in
+        let workItem = DispatchWorkItem { [weak self] in
             guard self?.handlerOwner != nil else { return }
             self?.onChange?()
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: debounceWorkItem!)
+        debounceWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: workItem)
     }
-    
+
     func clearHandler() {
         onChange = nil
         handlerOwner = nil
     }
 }
 
-// Synchronous helper for disk info parsing
-extension ShellHelper {
-    static func runSync(_ command: String) throws -> String {
-        let process = Process()
-        let pipe = Pipe()
-        
-        process.standardOutput = pipe
-        process.standardError = pipe
-        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        process.arguments = ["-c", command]
-        
-        try process.run()
-        process.waitUntilExit()
-        
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        return String(data: data, encoding: .utf8) ?? ""
-    }
-}
-
 enum DiskError: LocalizedError {
     case systemDiskProtection
-    case formatFailed(String)
+    case infoUnavailable(String)
     case mountPointNotFound
-    
+
     var errorDescription: String? {
         switch self {
         case .systemDiskProtection: return "Cannot format system disk"
-        case .formatFailed(let msg): return "Format failed: \(msg)"
+        case .infoUnavailable(let device): return "Could not read disk information for \(device)"
         case .mountPointNotFound: return "Could not find USB mount point"
         }
     }
