@@ -32,7 +32,7 @@ struct ContentView: View {
                             .animation(.easeInOut(duration: 0.5), value: rotation)
                     }
                     .buttonStyle(.plain)
-                    .disabled(viewModel.processState.isProcessing)
+                    .disabled(viewModel.processState.isProcessing || viewModel.isScanning)
                 }
 
                 DriveSelectorView(

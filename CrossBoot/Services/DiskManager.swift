@@ -44,28 +44,23 @@ actor DiskManager {
     }
 
     // List all removable USB drives
-    func listRemovableDrives() async -> [Drive] {
-        do {
-            let output = try await ShellHelper.run(Self.diskutil, ["list", "-plist", "external", "physical"])
-            let identifiers = Self.parseDiskIdentifiers(output)
+    func listRemovableDrives() async throws -> [Drive] {
+        let output = try await ShellHelper.run(Self.diskutil, ["list", "-plist", "external", "physical"])
+        let identifiers = Self.parseDiskIdentifiers(output)
 
-            // Each disk needs its own `diskutil info`; run them concurrently
-            // rather than blocking on one process at a time.
-            return await withTaskGroup(of: Drive?.self) { group in
-                for identifier in identifiers {
-                    group.addTask { await Self.removableDrive(identifier) }
-                }
-
-                var drives: [Drive] = []
-                for await drive in group {
-                    if let drive { drives.append(drive) }
-                }
-                // Task groups finish out of order; keep the picker order stable.
-                return drives.sorted { $0.id.localizedStandardCompare($1.id) == .orderedAscending }
+        // Each disk needs its own `diskutil info`; run them concurrently
+        // rather than blocking on one process at a time.
+        return await withTaskGroup(of: Drive?.self) { group in
+            for identifier in identifiers {
+                group.addTask { await Self.removableDrive(identifier) }
             }
-        } catch {
-            Log.disk.error("Failed to list drives: \(error.localizedDescription, privacy: .public)")
-            return []
+
+            var drives: [Drive] = []
+            for await drive in group {
+                if let drive { drives.append(drive) }
+            }
+            // Task groups finish out of order; keep the picker order stable.
+            return drives.sorted { $0.id.localizedStandardCompare($1.id) == .orderedAscending }
         }
     }
 

@@ -33,6 +33,11 @@ struct ProcessState {
     var progress: Double = 0
     var currentFile: String = ""
     
+    // A failure leaves no meaningful progress behind, so it always resets.
+    static func failed(_ message: String) -> ProcessState {
+        ProcessState(stage: .error(message), progress: 0)
+    }
+
     var isProcessing: Bool {
         switch stage {
         case .idle, .done, .aborted, .error:

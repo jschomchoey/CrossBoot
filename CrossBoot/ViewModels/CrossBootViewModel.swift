@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import UniformTypeIdentifiers
 
 @MainActor
 class CrossBootViewModel: ObservableObject {
@@ -51,7 +52,16 @@ class CrossBootViewModel: ObservableObject {
     
     func scanDrives() async {
         isScanning = true
-        drives = await diskManager.listRemovableDrives()
+        defer { isScanning = false }
+
+        do {
+            drives = try await diskManager.listRemovableDrives()
+        } catch {
+            // Without this the UI just says "No USB Drive Found" and hides why.
+            drives = []
+            Log.disk.error("Failed to list drives: \(error.localizedDescription, privacy: .public)")
+            processState = .failed("Could not list drives: \(error.localizedDescription)")
+        }
         
         // Match on the whole drive, not just its identifier: identifiers are
         // reused across replugs, so a stale value can describe a different disk.
@@ -60,15 +70,15 @@ class CrossBootViewModel: ObservableObject {
         } else {
             selectedDrive = drives.first
         }
-        
-        isScanning = false
     }
     
     // MARK: - ISO Operations
     
     func selectISO() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.init(filenameExtension: "iso")!]
+        if let isoType = UTType(filenameExtension: "iso") {
+            panel.allowedContentTypes = [isoType]
+        }
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.message = "Select a Windows ISO file"
@@ -79,10 +89,13 @@ class CrossBootViewModel: ObservableObject {
     }
     
     func handleISODrop(_ urls: [URL]) {
-        guard let url = urls.first,
-              url.pathExtension.lowercased() == "iso" else {
+        guard let url = urls.first else { return }
+
+        guard url.pathExtension.lowercased() == "iso" else {
+            processState = .failed("\(url.lastPathComponent) is not an ISO file")
             return
         }
+
         handleISOSelection(url)
     }
     
@@ -90,7 +103,7 @@ class CrossBootViewModel: ObservableObject {
         do {
             isoFile = try ISOFile(url: url)
         } catch {
-            processState.stage = .error("Failed to read ISO: \(error.localizedDescription)")
+            processState = .failed("Failed to read ISO: \(error.localizedDescription)")
         }
     }
     
@@ -125,12 +138,12 @@ class CrossBootViewModel: ObservableObject {
     
     private func performCreateBootableUSB() async {
         guard let drive = selectedDrive else {
-            processState.stage = .error("No USB drive selected")
+            processState = .failed("No USB drive selected")
             return
         }
         
         guard let iso = isoFile else {
-            processState.stage = .error("No ISO file selected")
+            processState = .failed("No ISO file selected")
             return
         }
         
@@ -228,7 +241,7 @@ class CrossBootViewModel: ObservableObject {
         } catch {
             await releaseResources()
 
-            processState.stage = .error(error.localizedDescription)
+            processState = .failed(error.localizedDescription)
             showAlert(
                 title: "Error",
                 message: error.localizedDescription,

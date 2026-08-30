@@ -78,19 +78,19 @@ struct ISODropZoneView: View {
     private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
         guard let provider = providers.first else { return false }
         
-        provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { data, error in
+        provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { data, _ in
             guard let data = data as? Data,
                   let url = URL(dataRepresentation: data, relativeTo: nil) else {
                 return
             }
-            
+
+            // The type is only known here, so a non-ISO drop is reported by the
+            // view model rather than dropped silently.
             DispatchQueue.main.async {
-                if url.pathExtension.lowercased() == "iso" {
-                    onDrop([url])
-                }
+                onDrop([url])
             }
         }
-        
+
         return true
     }
 }
