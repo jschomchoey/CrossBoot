@@ -123,12 +123,20 @@ actor DiskManager {
     }
 
     // Format drive to FAT32 with MBR
-    func formatDrive(_ device: String) async throws {
-        guard !device.contains("disk0") else {
-            throw DiskError.systemDiskProtection
+    func formatDrive(_ drive: Drive) async throws {
+        // Disk identifiers are reused when devices are replugged, so a selection
+        // made moments ago can point at a different disk - possibly an internal
+        // one - by the time we erase. Re-read the disk and require it to still be
+        // the exact removable drive the user chose.
+        guard let current = await Self.removableDrive(drive.id) else {
+            throw DiskError.driveUnavailable(drive.name)
         }
 
-        try await ShellHelper.run(Self.diskutil, ["eraseDisk", "MS-DOS", "WINDOWS", "MBR", device])
+        guard current == drive else {
+            throw DiskError.driveChanged
+        }
+
+        try await ShellHelper.run(Self.diskutil, ["eraseDisk", "MS-DOS", "WINDOWS", "MBR", drive.device])
     }
 
     // Get mount point
@@ -199,15 +207,28 @@ class DiskChangeHandler {
 }
 
 enum DiskError: LocalizedError {
-    case systemDiskProtection
+    case driveUnavailable(String)
+    case driveChanged
+    case insufficientSpace(required: Int64, available: Int64)
     case infoUnavailable(String)
     case mountPointNotFound
 
     var errorDescription: String? {
         switch self {
-        case .systemDiskProtection: return "Cannot format system disk"
-        case .infoUnavailable(let device): return "Could not read disk information for \(device)"
-        case .mountPointNotFound: return "Could not find USB mount point"
+        case .driveUnavailable(let name):
+            return "\"\(name)\" is no longer available as a removable drive. Nothing was erased."
+        case .driveChanged:
+            return "The selected drive changed since you chose it. Nothing was erased - refresh the drive list and try again."
+        case .insufficientSpace(let required, let available):
+            return "The drive holds \(Self.formatted(available)) but \(Self.formatted(required)) is needed. Nothing was erased."
+        case .infoUnavailable(let device):
+            return "Could not read disk information for \(device)"
+        case .mountPointNotFound:
+            return "Could not find USB mount point"
         }
+    }
+
+    private static func formatted(_ bytes: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
     }
 }

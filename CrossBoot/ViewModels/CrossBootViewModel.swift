@@ -40,11 +40,11 @@ class CrossBootViewModel: ObservableObject {
         isScanning = true
         drives = await diskManager.listRemovableDrives()
         
-        if selectedDrive == nil, let first = drives.first {
-            selectedDrive = first
-        }
-        
-        if let selected = selectedDrive, !drives.contains(where: { $0.id == selected.id }) {
+        // Match on the whole drive, not just its identifier: identifiers are
+        // reused across replugs, so a stale value can describe a different disk.
+        if let selected = selectedDrive {
+            selectedDrive = drives.first { $0 == selected } ?? drives.first
+        } else {
             selectedDrive = drives.first
         }
         
@@ -133,8 +133,14 @@ class CrossBootViewModel: ObservableObject {
         }
         
         do {
+            // Check before erasing rather than filling the drive and failing
+            // partway through the copy.
+            guard drive.size >= iso.sizeBytes else {
+                throw DiskError.insufficientSpace(required: iso.sizeBytes, available: drive.size)
+            }
+
             processState = ProcessState(stage: .formatting, progress: 2)
-            try await diskManager.formatDrive(drive.device)
+            try await diskManager.formatDrive(drive)
             
             try Task.checkCancellation()
             processState.progress = 5
@@ -251,11 +257,18 @@ class CrossBootViewModel: ObservableObject {
         
         let alert = NSAlert()
         alert.messageText = "Erase Everything?"
-        alert.informativeText = "All data on \"\(drive.name)\" will be permanently deleted."
+        alert.informativeText = """
+        All data on "\(drive.name)" (\(drive.device), \(drive.sizeFormatted)) will be permanently deleted.
+        """
         alert.alertStyle = .warning
-        alert.addButton(withTitle: "Erase")
-        alert.addButton(withTitle: "Cancel")
-        
+
+        let erase = alert.addButton(withTitle: "Erase")
+        let cancel = alert.addButton(withTitle: "Cancel")
+
+        // Return must not erase a drive by accident.
+        erase.keyEquivalent = ""
+        cancel.keyEquivalent = "\r"
+
         return alert.runModal() == .alertFirstButtonReturn
     }
 }
