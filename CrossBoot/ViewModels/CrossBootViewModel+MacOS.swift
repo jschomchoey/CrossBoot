@@ -20,6 +20,12 @@ extension CrossBootViewModel {
         isLoadingVersions = true
         defer { isLoadingVersions = false }
 
+        // Asked for its side effect, once macOS media is what the user is here
+        // for: the refusal is what puts CrossBoot in the Full Disk Access list,
+        // and the list is where they will go looking for it. The answer itself
+        // is what matters when a run starts.
+        _ = FullDiskAccess.isGranted
+
         let catalog = Task { try await SoftwareCatalog.shared.installers(refresh: refresh) }
         let offered = Task { try await InstallerSource.softwareUpdateInstallers() }
         // Reading a bundle walks it for its size, which is not the main thread's
@@ -166,16 +172,21 @@ extension CrossBootViewModel {
         let alert = NSAlert()
         alert.messageText = "CrossBoot needs Full Disk Access"
         alert.informativeText = """
-        macOS refuses the last step of writing a macOS installer - making the drive bootable -         unless CrossBoot has Full Disk Access.
+        macOS refuses the last step of writing a macOS installer - making the drive bootable - \
+        unless CrossBoot has Full Disk Access.
 
-        Add CrossBoot under Privacy & Security > Full Disk Access, then quit and reopen it.
+        Switch CrossBoot on in Privacy & Security > Full Disk Access, then quit and reopen it. \
+        If it is not listed there, add it with the + button; "Show CrossBoot" reveals the app to drag in.
         """
         alert.alertStyle = .warning
         alert.addButton(withTitle: "Open Settings")
+        alert.addButton(withTitle: "Show CrossBoot")
         alert.addButton(withTitle: "Cancel")
 
-        if alert.runModal() == .alertFirstButtonReturn {
-            FullDiskAccess.openSettings()
+        switch alert.runModal() {
+        case .alertFirstButtonReturn: FullDiskAccess.openSettings()
+        case .alertSecondButtonReturn: FullDiskAccess.showApplication()
+        default: break
         }
 
         return false

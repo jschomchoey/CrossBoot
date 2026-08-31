@@ -346,7 +346,7 @@ struct ContentView: View {
                     viewModel.createBootableUSB()
                 }
             } label: {
-                Text(viewModel.mediaKind == .windows ? "Create Bootable Drive" : "Create macOS Installer")
+                Text(viewModel.mediaKind == .windows ? "Create Windows Installer" : "Create macOS Installer")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
