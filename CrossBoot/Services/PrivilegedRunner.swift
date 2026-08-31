@@ -143,7 +143,9 @@ actor PrivilegedRunner {
             // reached the UI before this throws.
             await Self.emit(logURL, onOutput: onOutput)
 
-            if FileManager.default.fileExists(atPath: cancelURL.path) {
+            // The sentinel is also written when preparation fails, so what the
+            // run was asked to do - not the file - is what says this was a stop.
+            if Task.isCancelled {
                 throw CancellationError()
             }
 
