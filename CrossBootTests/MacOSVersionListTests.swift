@@ -80,6 +80,22 @@ final class MacOSVersionListTests: XCTestCase {
         XCTAssertEqual(model.macOSVersions[1].origin, applicationOrigin)
     }
 
+    // The symptom this came from: an installer expanded on disk called itself
+    // "15.7" where Apple's catalog called the same build 15.7.9, so the list
+    // offered the release as a download the user had already paid for.
+    func testTheSameBuildIsOneReleaseWhateverEachSourceCallsIt() {
+        let model = CrossBootViewModel()
+        model.offeredInstallers = [
+            installer("macOS Sequoia", [15, 7, 9], build: "24G830", origin: catalogOrigin),
+            installer("macOS Sequoia", [15, 7], build: "24G830", origin: applicationOrigin)
+        ]
+
+        model.refreshVersionList()
+
+        XCTAssertEqual(model.macOSVersions.count, 1)
+        XCTAssertEqual(model.macOSVersions.first?.origin, applicationOrigin)
+    }
+
     // Two builds of one version are two different installers, and only one of
     // them is on the disk.
     func testADifferentBuildOfTheSameVersionIsItsOwnEntry() {

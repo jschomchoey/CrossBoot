@@ -55,6 +55,7 @@
 		052 /* CrossBootViewModel+MacOS.swift in Sources */ = {isa = PBXBuildFile; fileRef = 152 /* CrossBootViewModel+MacOS.swift */; };
 		058 /* TransferRate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 158 /* TransferRate.swift */; };
 		060 /* FullDiskAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = 160 /* FullDiskAccess.swift */; };
+		062 /* DiskImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 162 /* DiskImage.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -109,6 +110,7 @@
 		152 /* CrossBootViewModel+MacOS.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CrossBootViewModel+MacOS.swift"; sourceTree = "<group>"; };
 		158 /* TransferRate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferRate.swift; sourceTree = "<group>"; };
 		160 /* FullDiskAccess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullDiskAccess.swift; sourceTree = "<group>"; };
+		162 /* DiskImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiskImage.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -193,6 +195,7 @@
 				132 /* WimXMLParser.swift */,
 				144 /* PrivilegedRunner.swift */,
 				160 /* FullDiskAccess.swift */,
+				162 /* DiskImage.swift */,
 				145 /* SoftwareCatalog.swift */,
 				146 /* DistributionParser.swift */,
 				147 /* InstallerSource.swift */,
@@ -393,6 +396,7 @@
 				052 /* CrossBootViewModel+MacOS.swift in Sources */,
 				058 /* TransferRate.swift in Sources */,
 				060 /* FullDiskAccess.swift in Sources */,
+				062 /* DiskImage.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

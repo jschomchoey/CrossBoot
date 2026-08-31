@@ -9,7 +9,7 @@ enum InstallerSource {
 
     // MARK: - Local installer application
 
-    static func installer(atApplication url: URL) throws -> MacOSInstaller {
+    static func installer(atApplication url: URL) async throws -> MacOSInstaller {
         let contents = url.appendingPathComponent("Contents")
 
         guard FileManager.default.fileExists(
@@ -18,7 +18,7 @@ enum InstallerSource {
             throw MacOSMediaPlanError.installerUnreadable(url.lastPathComponent)
         }
 
-        guard let release = applicationRelease(in: contents) else {
+        guard let release = await applicationRelease(in: contents) else {
             throw MacOSMediaPlanError.installerUnreadable(url.lastPathComponent)
         }
 
@@ -34,11 +34,20 @@ enum InstallerSource {
         )
     }
 
-    // Apple has moved where an installer records its release. Newer bundles keep
-    // it in the mobile asset manifest, older ones in InstallInfo, and the bundle
-    // version is the last resort.
-    private static func applicationRelease(in contents: URL) -> (version: MacOSVersion, build: String)? {
+    // Apple has moved where an installer records its release: Big Sur and later
+    // keep it inside SharedSupport.dmg, before that beside the image, older ones
+    // again in InstallInfo.
+    //
+    // The bundle's own Info.plist is the last resort and a poor one - it
+    // describes the installer application rather than the macOS it installs, so
+    // a 15.7.9 (24G830) installer calls itself 15.7 (24G818) there - but a
+    // wrong answer beats refusing an installer that would have worked.
+    private static func applicationRelease(in contents: URL) async -> (version: MacOSVersion, build: String)? {
         let shared = contents.appendingPathComponent("SharedSupport")
+
+        if let release = await sharedSupportRelease(at: shared.appendingPathComponent("SharedSupport.dmg")) {
+            return release
+        }
 
         if let asset = dictionary(at: shared.appendingPathComponent("com_apple_MobileAsset_MacSoftwareUpdate.xml")),
            let assets = asset["Assets"] as? [[String: Any]],
@@ -63,6 +72,41 @@ enum InstallerSource {
         return nil
     }
 
+    // Inside the image, the release is one field of one of the asset manifests
+    // the installer would hand to the update machinery, or - on older installers
+    // - the InstallInfo beside them.
+    private static func sharedSupportRelease(at image: URL) async -> (version: MacOSVersion, build: String)? {
+        guard FileManager.default.fileExists(atPath: image.path) else { return nil }
+
+        return await DiskImage.read(image) { mount in
+            let assets = mount.appendingPathComponent("com_apple_MobileAsset_MacSoftwareUpdate")
+            let manifests = (try? FileManager.default.contentsOfDirectory(
+                at: assets,
+                includingPropertiesForKeys: nil
+            )) ?? []
+
+            for manifest in manifests where manifest.pathExtension == "json" {
+                guard let data = try? Data(contentsOf: manifest),
+                      let asset = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let version = (asset["OSVersion"] as? String).flatMap(MacOSVersion.init),
+                      let build = asset["Build"] as? String else {
+                    continue
+                }
+
+                return (version, build)
+            }
+
+            if let info = dictionary(at: mount.appendingPathComponent("InstallInfo.plist")),
+               let image = info["System Image Info"] as? [String: Any],
+               let version = (image["version"] as? String).flatMap(MacOSVersion.init),
+               let build = image["build"] as? String {
+                return (version, build)
+            }
+
+            return nil
+        }
+    }
+
     private static func applicationName(in contents: URL) -> String? {
         guard let info = dictionary(at: contents.appendingPathComponent("Info.plist")),
               let displayed = (info["CFBundleDisplayName"] ?? info["CFBundleName"]) as? String else {
@@ -80,19 +124,27 @@ enum InstallerSource {
     //
     // Reading each bundle walks it for its size, so this belongs off the main
     // thread with the other two sources.
-    static func installedApplications(in directory: URL = URL(fileURLWithPath: "/Applications")) -> [MacOSInstaller] {
+    static func installedApplications(in directory: URL = URL(fileURLWithPath: "/Applications")) async -> [MacOSInstaller] {
         let contents = (try? FileManager.default.contentsOfDirectory(
             at: directory,
             includingPropertiesForKeys: nil,
             options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants]
         )) ?? []
 
-        return contents
-            // Apple names every one of them this way, and the alternative is
-            // reading the Info.plist of every application on the Mac.
-            .filter { $0.pathExtension == "app" && $0.lastPathComponent.hasPrefix("Install macOS ") }
-            .compactMap { try? installer(atApplication: $0) }
-            .sorted { $0.version > $1.version }
+        // Apple names every one of them this way, and the alternative is reading
+        // the Info.plist of every application on the Mac.
+        let bundles = contents.filter {
+            $0.pathExtension == "app" && $0.lastPathComponent.hasPrefix("Install macOS ")
+        }
+
+        var installers: [MacOSInstaller] = []
+
+        for bundle in bundles {
+            guard let installer = try? await installer(atApplication: bundle) else { continue }
+            installers.append(installer)
+        }
+
+        return installers.sorted { $0.version > $1.version }
     }
 
     // MARK: - Local InstallAssistant package

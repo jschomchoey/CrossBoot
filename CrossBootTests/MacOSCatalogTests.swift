@@ -165,11 +165,11 @@ final class MacOSCatalogTests: XCTestCase {
 
     // An installer left in /Applications by an earlier run is 12-18 GB that has
     // already been paid for, so the list has to find it without being told.
-    func testInstallersAlreadyInApplicationsAreFound() throws {
+    func testInstallersAlreadyInApplicationsAreFound() async throws {
         let applications = try makeApplicationsDirectory()
         try makeInstaller(named: "Install macOS Sequoia", version: "15.7.9", build: "24G818", in: applications)
 
-        let found = InstallerSource.installedApplications(in: applications)
+        let found = await InstallerSource.installedApplications(in: applications)
 
         XCTAssertEqual(found.count, 1)
         XCTAssertEqual(found.first?.name, "macOS Sequoia")
@@ -180,7 +180,7 @@ final class MacOSCatalogTests: XCTestCase {
 
     // Everything else in /Applications is somebody's ordinary app, and a folder
     // that only looks like an installer cannot write a drive.
-    func testOnlyRealInstallerApplicationsAreFound() throws {
+    func testOnlyRealInstallerApplicationsAreFound() async throws {
         let applications = try makeApplicationsDirectory()
         try makeInstaller(named: "Install macOS Sequoia", version: "15.7.9", build: "24G818", in: applications)
         try makeInstaller(named: "Safari", version: "26.0", build: "25A354", in: applications)
@@ -192,14 +192,19 @@ final class MacOSCatalogTests: XCTestCase {
             createInstallMedia: false
         )
 
-        XCTAssertEqual(InstallerSource.installedApplications(in: applications).map(\.name), ["macOS Sequoia"])
+        let found = await InstallerSource.installedApplications(in: applications)
+
+        XCTAssertEqual(found.map(\.name), ["macOS Sequoia"])
     }
 
-    func testNothingIsFoundWhereThereIsNothingToFind() throws {
+    func testNothingIsFoundWhereThereIsNothingToFind() async throws {
         let applications = try makeApplicationsDirectory()
 
-        XCTAssertTrue(InstallerSource.installedApplications(in: applications).isEmpty)
-        XCTAssertTrue(InstallerSource.installedApplications(in: applications.appendingPathComponent("gone")).isEmpty)
+        let found = await InstallerSource.installedApplications(in: applications)
+        let missing = await InstallerSource.installedApplications(in: applications.appendingPathComponent("gone"))
+
+        XCTAssertTrue(found.isEmpty)
+        XCTAssertTrue(missing.isEmpty)
     }
 
     private func makeApplicationsDirectory() throws -> URL {

@@ -30,7 +30,7 @@ extension CrossBootViewModel {
         let offered = Task { try await InstallerSource.softwareUpdateInstallers() }
         // Reading a bundle walks it for its size, which is not the main thread's
         // work while the list is being drawn.
-        let installed = Task.detached { InstallerSource.installedApplications() }
+        let installed = Task.detached { await InstallerSource.installedApplications() }
 
         var problem: String?
         var fetched: [MacOSInstaller] = []
@@ -120,7 +120,7 @@ extension CrossBootViewModel {
     private static func installer(at url: URL) async throws -> MacOSInstaller {
         switch url.pathExtension.lowercased() {
         case "app":
-            return try InstallerSource.installer(atApplication: url)
+            return try await InstallerSource.installer(atApplication: url)
         case "pkg":
             return try await InstallerSource.installer(atPackage: url)
         default:
@@ -137,7 +137,7 @@ extension CrossBootViewModel {
         var order: [String] = []
 
         for installer in addedInstallers + offeredInstallers {
-            let release = "\(installer.name) \(installer.version) \(installer.build)"
+            let release = Self.release(of: installer)
 
             guard let listed = chosen[release] else {
                 chosen[release] = installer
@@ -159,6 +159,13 @@ extension CrossBootViewModel {
         if selectedVersion == nil {
             selectedVersion = macOSVersions.first { MacOSMediaPlan.refusal(for: $0) == nil }
         }
+    }
+
+    // A build names a release exactly and every source agrees on it; the name
+    // and the version string are what each source calls it, and they do not
+    // always agree. Only a source that gave no build falls back to those.
+    private static func release(of installer: MacOSInstaller) -> String {
+        installer.build.isEmpty ? "\(installer.name) \(installer.version)" : installer.build
     }
 
     // MARK: - Run
