@@ -25,6 +25,7 @@ final class MediaPlanTests: XCTestCase {
         architecture: WindowsArchitecture? = .x64,
         installImage: String? = "sources/install.wim",
         imageBytes: Int64 = 5_000_000_000,
+        compression: WimCompression = .lzx,
         hasBootLoader: Bool = true
     ) throws -> ISOFile {
         let url = directory.appendingPathComponent(name)
@@ -32,7 +33,9 @@ final class MediaPlanTests: XCTestCase {
 
         return try ISOFile(
             url: url,
-            installImage: installImage.map { InstallImage(relativePath: $0, sizeBytes: imageBytes) },
+            installImage: installImage.map {
+                InstallImage(relativePath: $0, sizeBytes: imageBytes, compression: compression)
+            },
             images: editions.enumerated().map { offset, edition in
                 WindowsImage(
                     index: offset + 1,

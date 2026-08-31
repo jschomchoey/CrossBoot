@@ -40,7 +40,7 @@ final class WindowSizingTests: XCTestCase {
 
             model.isoFiles.append(try ISOFile(
                 url: url,
-                installImage: InstallImage(relativePath: "sources/install.wim", sizeBytes: 5_000_000_000),
+                installImage: InstallImage(relativePath: "sources/install.wim", sizeBytes: 5_000_000_000, compression: .lzx),
                 images: (1...11).map {
                     WindowsImage(index: $0, name: "Windows 11 Edition \($0)", architecture: .x64, build: 26100, totalBytes: 0)
                 },

@@ -75,3 +75,47 @@ final class WimXMLParserTests: XCTestCase {
         XCTAssertThrowsError(try WimXMLParser.images(from: Data([0x00, 0x01, 0x02])))
     }
 }
+
+// Compression decides whether an oversized install image can be split for FAT32
+// or has to be rewritten first, and only the WIM header says which it is - the
+// file name does not. An install.esd renamed to install.wim is common.
+final class WimHeaderTests: XCTestCase {
+
+    private static func header(compression: String) -> String {
+        """
+        WIM Information:
+        ----------------
+        Path:           /Volumes/W/sources/install.wim
+        Image Count:    11
+        Compression:    \(compression)
+        Chunk Size:     32768 bytes
+        """
+    }
+
+    func testReadsEveryCompressionWimlibReports() {
+        let expected: [String: WimCompression] = [
+            "LZX": .lzx,
+            "XPRESS": .xpress,
+            "LZMS": .lzms,
+            "None": .none
+        ]
+
+        for (reported, compression) in expected {
+            XCTAssertEqual(WimLibService.compression(inHeader: Self.header(compression: reported)), compression)
+        }
+    }
+
+    func testOnlySolidImagesAreRefusedForSplitting() {
+        XCTAssertTrue(WimCompression.lzx.isSplittable)
+        XCTAssertTrue(WimCompression.xpress.isSplittable)
+        XCTAssertTrue(WimCompression.none.isSplittable)
+        XCTAssertFalse(WimCompression.lzms.isSplittable)
+    }
+
+    // Guessing "splittable" from an unreadable header costs the user an erased
+    // drive; guessing "solid" only costs a rewrite that was not needed.
+    func testAnUnreadableHeaderIsTreatedAsSolid() {
+        XCTAssertEqual(WimLibService.compression(inHeader: "no header here"), .lzms)
+        XCTAssertEqual(WimLibService.compression(inHeader: "Compression:    LZ-something"), .lzms)
+    }
+}

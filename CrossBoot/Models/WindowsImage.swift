@@ -46,13 +46,33 @@ struct WindowsImage: Hashable {
     }
 }
 
-// Where an ISO keeps its installable images, and how big that file is.
+// How a WIM stores its data, as wimlib-imagex reports it.
+enum WimCompression: String, Hashable {
+    case none = "NONE"
+    case xpress = "XPRESS"
+    case lzx = "LZX"
+    case lzms = "LZMS"
+
+    // wimlib writes LZMS data in solid blocks and refuses to split a WIM that
+    // holds them, which FAT32 forces on any image of 4 GiB or more. A solid
+    // image therefore has to be rewritten before it can reach the drive.
+    var isSplittable: Bool { self != .lzms }
+
+    var exportArgument: String { "--compress=\(rawValue)" }
+
+    // The value beside "Compression:" in `wimlib-imagex info`. Anything
+    // unrecognised is read as solid: rewriting an image that did not need it
+    // costs time, while splitting one that cannot be split fails the run.
+    init(reported: String) {
+        self = WimCompression(rawValue: reported.trimmingCharacters(in: .whitespaces).uppercased()) ?? .lzms
+    }
+}
+
+// Where an ISO keeps its installable images, how big that file is and how it
+// is compressed - which decides whether it can be split for FAT32 as it is.
 struct InstallImage: Hashable {
     // Relative to the ISO root, spelled as the ISO actually spells it.
     let relativePath: String
     let sizeBytes: Int64
-
-    var isSolid: Bool {
-        relativePath.lowercased().hasSuffix(".esd")
-    }
+    let compression: WimCompression
 }

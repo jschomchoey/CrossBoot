@@ -45,12 +45,22 @@ actor ISOHandler {
         let mountPoint = try await mountISO(isoURL)
 
         do {
-            let installImage = Self.installImage(in: mountPoint)
+            var installImage: InstallImage?
             var images: [WindowsImage] = []
 
-            if let installImage {
-                let path = (mountPoint as NSString).appendingPathComponent(installImage.relativePath)
-                images = try await WimLibService.shared.inspectImages(at: path)
+            // The file name says nothing about how the image is compressed - an
+            // install.esd renamed to install.wim is common - and compression is
+            // what decides whether FAT32 can be served by splitting it.
+            if let found = Self.installImage(in: mountPoint) {
+                let path = (mountPoint as NSString).appendingPathComponent(found.relativePath)
+                let inspection = try await WimLibService.shared.inspect(at: path)
+
+                installImage = InstallImage(
+                    relativePath: found.relativePath,
+                    sizeBytes: found.sizeBytes,
+                    compression: inspection.compression
+                )
+                images = inspection.images
             }
 
             let iso = try ISOFile(
@@ -70,8 +80,9 @@ actor ISOHandler {
 
     // Locate sources/install.wim or sources/install.esd. ISO filesystems are
     // case-sensitive on macOS while Windows media is inconsistent about case, so
-    // every component is matched without regard to it.
-    static func installImage(in mountPoint: String) -> InstallImage? {
+    // every component is matched without regard to it. Compression is left to
+    // the caller: only wimlib can read it out of the file itself.
+    static func installImage(in mountPoint: String) -> (relativePath: String, sizeBytes: Int64)? {
         guard let sources = entry(named: "sources", in: mountPoint) else { return nil }
 
         for fileName in ["install.wim", "install.esd"] {
@@ -80,7 +91,7 @@ actor ISOHandler {
                 continue
             }
 
-            return InstallImage(
+            return (
                 relativePath: String(path.dropFirst(mountPoint.count + 1)),
                 sizeBytes: attributes[.size] as? Int64 ?? 0
             )

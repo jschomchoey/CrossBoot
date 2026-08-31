@@ -27,15 +27,37 @@ actor WimLibService {
         }
     }
 
-    // Read an image list out of a WIM/ESD without unpacking it.
-    func inspectImages(at wimPath: String) async throws -> [WindowsImage] {
+    // What an inspection pass learned about a WIM without unpacking it.
+    struct Inspection {
+        let compression: WimCompression
+        let images: [WindowsImage]
+    }
+
+    func inspect(at wimPath: String) async throws -> Inspection {
         let xmlURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("crossboot-xml-\(UUID().uuidString).xml")
         defer { try? FileManager.default.removeItem(at: xmlURL) }
 
-        try await ShellHelper.run(try Self.binaryPath(), ["info", wimPath, "--extract-xml", xmlURL.path])
+        let binary = try Self.binaryPath()
 
-        return try WimXMLParser.images(from: try Data(contentsOf: xmlURL))
+        // --extract-xml writes the image list to a file and prints nothing, so
+        // the compression takes a second pass over the same header.
+        try await ShellHelper.run(binary, ["info", wimPath, "--extract-xml", xmlURL.path])
+        let header = try await ShellHelper.run(binary, ["info", wimPath])
+
+        return Inspection(
+            compression: Self.compression(inHeader: header),
+            images: try WimXMLParser.images(from: try Data(contentsOf: xmlURL))
+        )
+    }
+
+    static func compression(inHeader header: String) -> WimCompression {
+        let value = header
+            .components(separatedBy: .newlines)
+            .first { $0.hasPrefix("Compression:") }?
+            .dropFirst("Compression:".count)
+
+        return WimCompression(reported: String(value ?? ""))
     }
 
     // Append one source image to `destination`, creating it on the first call.

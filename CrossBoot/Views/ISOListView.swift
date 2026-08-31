@@ -128,7 +128,7 @@ private func previewISO(_ name: String, build: Int, editions: Int) -> ISOFile? {
 
     return try? ISOFile(
         url: url,
-        installImage: InstallImage(relativePath: "sources/install.wim", sizeBytes: 5_000_000_000),
+        installImage: InstallImage(relativePath: "sources/install.wim", sizeBytes: 5_000_000_000, compression: .lzx),
         images: (1...editions).map {
             WindowsImage(index: $0, name: "Edition \($0)", architecture: .x64, build: build, totalBytes: 0)
         },

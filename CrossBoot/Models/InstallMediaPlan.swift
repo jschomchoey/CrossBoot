@@ -153,7 +153,7 @@ struct InstallMediaPlan {
     // the format that already holds most of the bytes.
     private static func compression(for isoFiles: [ISOFile]) -> WimLibService.Compression {
         let solidBytes: Int64 = isoFiles.reduce(0) { total, iso in
-            guard let image = iso.installImage, image.isSolid else { return total }
+            guard let image = iso.installImage, !image.compression.isSplittable else { return total }
             return total + image.sizeBytes
         }
 
