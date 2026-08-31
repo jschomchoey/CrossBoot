@@ -99,14 +99,23 @@ before anything is erased:
 
 Versions this Mac cannot build are hidden until you ask for them in the menu beside **macOS Version**.
 
+### Full Disk Access
+
+macOS refuses `createinstallmedia` its last step - making the drive bootable - unless the app that started it
+has Full Disk Access, and it refuses it *after* the download and the erase. CrossBoot therefore asks for the
+grant before a run starts: add it under **System Settings > Privacy & Security > Full Disk Access**, then quit
+and reopen the app.
+
 ### What it does to your Mac
 
 Writing macOS media needs `createinstallmedia`, which needs root, so CrossBoot asks for your administrator
-password once per run. Everything privileged happens in a single step, and nothing you chose is ever spliced
-into a command - paths are passed as arguments and quoted by AppleScript itself.
+password once per run - when you press the button, not an hour later. The privileged step waits for the
+download while it holds that authorization, so nothing interrupts a run halfway through. It is a single step,
+and nothing you chose is ever spliced into a command: paths are passed as arguments and quoted by AppleScript
+itself.
 
 The drive is checked twice: once before the password prompt, and again as root immediately before the erase,
-because preparing an installer can take an hour and a drive can be swapped in that time. It has to still be
+because downloading an installer can take an hour and a drive can be swapped in that time. It has to still be
 external, still removable, and still exactly the size it was.
 
 Preparing the installer leaves `Install macOS X.app` in `/Applications`. CrossBoot tells you it is there, and

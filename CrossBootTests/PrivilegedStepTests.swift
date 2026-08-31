@@ -29,7 +29,9 @@ final class PrivilegedStepTests: XCTestCase {
             for: request,
             script: URL(fileURLWithPath: "/tmp/work/run.sh"),
             log: URL(fileURLWithPath: "/tmp/work/run.log"),
-            cancel: URL(fileURLWithPath: "/tmp/work/cancel")
+            cancel: URL(fileURLWithPath: "/tmp/work/cancel"),
+            ready: URL(fileURLWithPath: "/tmp/work/ready"),
+            heartbeat: URL(fileURLWithPath: "/tmp/work/heartbeat")
         )
     }
 
@@ -42,6 +44,8 @@ final class PrivilegedStepTests: XCTestCase {
             "/tmp/work/run.sh",
             "/tmp/work/run.log",
             "/tmp/work/cancel",
+            "/tmp/work/ready",
+            "/tmp/work/heartbeat",
             "package",
             "/tmp/InstallAssistant.pkg",
             "/Applications/Install macOS Tahoe.app",
@@ -53,8 +57,8 @@ final class PrivilegedStepTests: XCTestCase {
     }
 
     func testEachPreparationNamesItsOwnKindAndSource() {
-        XCTAssertEqual(argv(request(preparation: .fetch(version: "13.7.8")))[5...6].map { $0 }, ["fetch", "13.7.8"])
-        XCTAssertEqual(argv(request(preparation: .application))[5...6].map { $0 }, ["application", ""])
+        XCTAssertEqual(argv(request(preparation: .fetch(version: "13.7.8")))[7...8].map { $0 }, ["fetch", "13.7.8"])
+        XCTAssertEqual(argv(request(preparation: .application))[7...8].map { $0 }, ["application", ""])
     }
 
     func testRemovingThePreparedInstallerIsOptedInto() {
@@ -116,5 +120,92 @@ final class PrivilegedStepTests: XCTestCase {
         XCTAssertTrue(script.contains("eraseDisk JHFS+"), "createinstallmedia requires Mac OS Extended (Journaled)")
         XCTAssertTrue(script.contains("GPT"))
         XCTAssertFalse(script.contains("MS-DOS"))
+    }
+
+    // MARK: - Waiting for the download
+
+    // The password is asked for when the run starts, so the step parks itself
+    // until the app says the installer is there. Everything below runs the real
+    // script: none of it reaches a command that needs root, because the step
+    // gives up on the missing installer application first.
+    func testTheStepWaitsBeforeItTouchesTheDrive() throws {
+        let script = PrivilegedRunner.script
+
+        let wait = try XCTUnwrap(script.range(of: "while [ ! -e \"$READY\" ]"))
+        let erase = try XCTUnwrap(script.range(of: "eraseDisk"))
+        let prepare = try XCTUnwrap(script.range(of: "installer -pkg"))
+
+        XCTAssertLessThan(wait.lowerBound, prepare.lowerBound)
+        XCTAssertLessThan(wait.lowerBound, erase.lowerBound)
+    }
+
+    func testTheStepRunsOnceTheDownloadIsReady() throws {
+        // 66 is the step's own "this is not an installer application", which is
+        // the first thing it checks after the wait.
+        XCTAssertEqual(try runScript(ready: true), 66)
+    }
+
+    func testAStepWaitingOnADownloadStopsWhenTheRunIsCancelled() throws {
+        XCTAssertEqual(try runScript(ready: false, cancel: true), 130)
+    }
+
+    // Nothing else ends the wait if the app is killed while it downloads, and
+    // the step is running as root.
+    func testAStepWaitingOnAnAppThatStoppedAnsweringGivesUp() throws {
+        XCTAssertEqual(try runScript(ready: false, heartbeat: Date(timeIntervalSinceNow: -600)), 75)
+        XCTAssertEqual(try runScript(ready: false, heartbeat: nil), 75)
+    }
+
+    // Runs the privileged script itself, unprivileged, with a drive it will
+    // never reach.
+    private func runScript(
+        ready: Bool,
+        cancel: Bool = false,
+        heartbeat: Date? = Date()
+    ) throws -> Int32 {
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("crossboot-step-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+
+        let scriptURL = directory.appendingPathComponent("run.sh")
+        let logURL = directory.appendingPathComponent("run.log")
+        let cancelURL = directory.appendingPathComponent("cancel")
+        let readyURL = directory.appendingPathComponent("ready")
+        let heartbeatURL = directory.appendingPathComponent("heartbeat")
+
+        try PrivilegedRunner.script.write(to: scriptURL, atomically: true, encoding: .utf8)
+
+        if ready { FileManager.default.createFile(atPath: readyURL.path, contents: nil) }
+        if cancel { FileManager.default.createFile(atPath: cancelURL.path, contents: nil) }
+        if let heartbeat {
+            FileManager.default.createFile(atPath: heartbeatURL.path, contents: nil)
+            try FileManager.default.setAttributes(
+                [.modificationDate: heartbeat],
+                ofItemAtPath: heartbeatURL.path
+            )
+        }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = [
+            scriptURL.path,
+            logURL.path,
+            cancelURL.path,
+            readyURL.path,
+            heartbeatURL.path,
+            "application",
+            "",
+            directory.appendingPathComponent("Install macOS Nothing.app").path,
+            "/dev/null",
+            "CrossBoot-TEST",
+            "0",
+            "no"
+        ]
+
+        try process.run()
+        process.waitUntilExit()
+
+        return process.terminationStatus
     }
 }

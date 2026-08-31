@@ -137,6 +137,30 @@ extension CrossBootViewModel {
 
     // MARK: - Run
 
+    // Without Full Disk Access, createinstallmedia is refused its last step -
+    // after the download, and after the drive has been erased and written. That
+    // is far too late to find out, so it is asked for before anything starts.
+    func confirmAccess() -> Bool {
+        guard mediaKind == .macOS, !FullDiskAccess.isGranted else { return true }
+
+        let alert = NSAlert()
+        alert.messageText = "CrossBoot needs Full Disk Access"
+        alert.informativeText = """
+        macOS refuses the last step of writing a macOS installer - making the drive bootable -         unless CrossBoot has Full Disk Access.
+
+        Add CrossBoot under Privacy & Security > Full Disk Access, then quit and reopen it.
+        """
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Open Settings")
+        alert.addButton(withTitle: "Cancel")
+
+        if alert.runModal() == .alertFirstButtonReturn {
+            FullDiskAccess.openSettings()
+        }
+
+        return false
+    }
+
     var macOSPlan: MacOSMediaPlan? {
         guard let selectedVersion else { return nil }
         return try? MacOSMediaPlan.make(for: selectedVersion)

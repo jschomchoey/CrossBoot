@@ -45,18 +45,13 @@ final class MacOSMediaBuilder {
         try await diskManager.verifyStillPresent(drive)
         state.progress = Milestone.checked
 
-        // The installer is obtained before the drive is touched. A download that
-        // fails, or a package Apple's own byte count disagrees with, then leaves
-        // the drive exactly as it was.
+        // What the privileged step will be asked to do is decided before the
+        // password is asked for, so the prompt can come first and the download
+        // can run while the step waits for it.
         let preparation = try await prepare(plan.installer)
-
-        try Task.checkCancellation()
-
-        // The drive was last checked before a download that can run for an hour.
-        try await diskManager.verifyStillPresent(drive)
-
         let start = preparation.progress
-        state = ProcessState(stage: .authorizing, progress: start)
+
+        state = ProcessState(stage: .authorizing, progress: Milestone.checked)
 
         let request = PrivilegedRunner.Request(
             preparation: preparation.step,
@@ -70,15 +65,37 @@ final class MacOSMediaBuilder {
             removesPreparedInstaller: removingInstaller
         )
 
-        try await privileged.createInstallMedia(request) { [weak self] output in
+        try await privileged.createInstallMedia(request) { [weak self] in
+            guard let self else { return }
+
+            // The installer is obtained before the drive is touched. A download
+            // that fails, or a package Apple's own byte count disagrees with,
+            // then leaves the drive exactly as it was.
+            if let download = preparation.download {
+                try await self.fetch(download, for: plan.installer)
+            }
+
+            try Task.checkCancellation()
+
+            // The drive was last checked before a download that can run for an
+            // hour, and the erase is the step that cannot be taken back.
+            try await self.diskManager.verifyStillPresent(drive)
+        } onOutput: { [weak self] output in
             self?.report(output, from: start)
         }
 
         state = ProcessState(stage: .done, progress: Milestone.finished)
     }
 
-    // What the privileged step has to do first, and where the bar stands by then.
-    private typealias Prepared = (step: PrivilegedRunner.Preparation, progress: Double)
+    // The package Apple publishes, and where this run puts it.
+    private struct Download {
+        let url: URL
+        let destination: URL
+    }
+
+    // What the privileged step has to do, what has to be downloaded before it
+    // can do it, and where the bar stands once that download is done.
+    private typealias Prepared = (step: PrivilegedRunner.Preparation, download: Download?, progress: Double)
 
     private func prepare(_ installer: MacOSInstaller) async throws -> Prepared {
         switch installer.origin {
@@ -86,37 +103,43 @@ final class MacOSMediaBuilder {
             let directory = try await scratch.makeTemporaryDirectory()
             let destination = directory.appendingPathComponent("InstallAssistant.pkg")
 
-            state = ProcessState(stage: .downloading, progress: Milestone.checked)
-
-            try await downloader.download(
-                from: packageURL,
-                expecting: installer.sizeBytes,
-                to: destination
-            ) { [weak self] progress in
-                guard let self else { return }
-
-                self.state.progress = MediaBuilder.overallProgress(
-                    progress.percent,
-                    from: Milestone.checked,
-                    to: Milestone.downloaded
-                )
-                // An 18 GB download that only moves a bar looks stalled, so the
-                // status line carries the rate it is actually running at.
-                self.state.currentFile = [installer.title, progress.rate]
-                    .compactMap { $0 }
-                    .joined(separator: " · ")
-            }
-
-            return (.package(destination), Milestone.downloaded)
+            return (
+                .package(destination),
+                Download(url: packageURL, destination: destination),
+                Milestone.downloaded
+            )
 
         case .package(let url):
-            return (.package(url), Milestone.checked)
+            return (.package(url), nil, Milestone.checked)
 
         case .softwareUpdate:
-            return (.fetch(version: installer.version.description), Milestone.checked)
+            return (.fetch(version: installer.version.description), nil, Milestone.checked)
 
         case .application:
-            return (.application, Milestone.checked)
+            return (.application, nil, Milestone.checked)
+        }
+    }
+
+    private func fetch(_ download: Download, for installer: MacOSInstaller) async throws {
+        state = ProcessState(stage: .downloading, progress: Milestone.checked)
+
+        try await downloader.download(
+            from: download.url,
+            expecting: installer.sizeBytes,
+            to: download.destination
+        ) { [weak self] progress in
+            guard let self else { return }
+
+            self.state.progress = MediaBuilder.overallProgress(
+                progress.percent,
+                from: Milestone.checked,
+                to: Milestone.downloaded
+            )
+            // An 18 GB download that only moves a bar looks stalled, so the
+            // status line carries the rate it is actually running at.
+            self.state.currentFile = [installer.title, progress.rate]
+                .compactMap { $0 }
+                .joined(separator: " · ")
         }
     }
 

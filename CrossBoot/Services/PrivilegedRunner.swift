@@ -8,6 +8,11 @@ import Foundation
 // AuthorizationExecuteWithPrivileges is long gone from the SDK. That leaves one
 // authorization prompt per run, raised through osascript.
 //
+// The prompt is raised when the run starts, not when the drive is written: the
+// step parks itself on a sentinel file and the app lets it go once the installer
+// has been downloaded. Otherwise the password is asked for an hour into a run
+// nobody is sitting in front of any more.
+//
 // Nothing the user chose is ever spliced into script text. Paths reach
 // AppleScript as `on run argv` items and are wrapped in `quoted form of` at its
 // runtime, so a volume called `a"b $(rm -rf ~)` is passed through verbatim - the
@@ -58,11 +63,15 @@ actor PrivilegedRunner {
         let removesPreparedInstaller: Bool
     }
 
-    // Streams the whole accumulated output so far on every update. The tools
+    // Raises the authorization prompt, runs `preparing` while the step waits for
+    // it, and only then lets the step touch the drive.
+    //
+    // Output is streamed as the whole accumulated log on every update. The tools
     // write progress as dots on one unterminated line, so there is no line to
     // wait for, and re-reading a log of a few kilobytes costs nothing.
     func createInstallMedia(
         _ request: Request,
+        preparing: @escaping @Sendable () async throws -> Void,
         onOutput: @escaping @Sendable @MainActor (String) -> Void
     ) async throws {
         let workDirectory = try Self.makeWorkDirectory()
@@ -71,29 +80,64 @@ actor PrivilegedRunner {
         let scriptURL = workDirectory.appendingPathComponent("run.sh")
         let logURL = workDirectory.appendingPathComponent("run.log")
         let cancelURL = workDirectory.appendingPathComponent("cancel")
+        let readyURL = workDirectory.appendingPathComponent("ready")
+        let heartbeatURL = workDirectory.appendingPathComponent("heartbeat")
 
         try Self.script.write(to: scriptURL, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: scriptURL.path)
         FileManager.default.createFile(atPath: logURL.path, contents: nil)
+        FileManager.default.createFile(atPath: heartbeatURL.path, contents: nil)
 
         let arguments = Self.arguments(
             for: request,
             script: scriptURL,
             log: logURL,
-            cancel: cancelURL
+            cancel: cancelURL,
+            ready: readyURL,
+            heartbeat: heartbeatURL
         )
 
         let tail = Task { await Self.tail(logURL, onOutput: onOutput) }
-        defer { tail.cancel() }
+        let heartbeat = Task { await Self.beat(heartbeatURL) }
+        defer {
+            tail.cancel()
+            heartbeat.cancel()
+        }
 
         do {
-            _ = try await withTaskCancellationHandler {
-                try await ShellHelper.run(Self.osascript, arguments)
-            } onCancel: {
-                // The privileged step runs as root and cannot be signalled from
-                // here, so it polls for this file and ends itself.
-                FileManager.default.createFile(atPath: cancelURL.path, contents: nil)
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                group.addTask {
+                    _ = try await withTaskCancellationHandler {
+                        try await ShellHelper.run(Self.osascript, arguments)
+                    } onCancel: {
+                        // The privileged step runs as root and cannot be
+                        // signalled from here, so it polls for this file and
+                        // ends itself.
+                        FileManager.default.createFile(atPath: cancelURL.path, contents: nil)
+                    }
+                }
+
+                group.addTask {
+                    do {
+                        try await preparing()
+                    } catch {
+                        // The step is parked on a file that is never coming.
+                        FileManager.default.createFile(atPath: cancelURL.path, contents: nil)
+                        throw PreparationFailed(underlying: error)
+                    }
+
+                    FileManager.default.createFile(atPath: readyURL.path, contents: nil)
+                }
+
+                // Whichever fails first ends the run: a refused password must
+                // not leave a download running, and a download that failed must
+                // not leave the drive to be erased.
+                for try await _ in group {}
             }
+        } catch let failure as PreparationFailed {
+            await Self.emit(logURL, onOutput: onOutput)
+
+            throw failure.underlying
         } catch {
             // Give the tail a last pass so the failure the log explains has
             // reached the UI before this throws.
@@ -109,6 +153,12 @@ actor PrivilegedRunner {
         await Self.emit(logURL, onOutput: onOutput)
     }
 
+    // Preparation reports its own failures - a download that stopped is not a
+    // privileged step that went wrong - so its error is carried out untouched.
+    private struct PreparationFailed: Error {
+        let underlying: Error
+    }
+
     // Everything after "-e" and the script text is argv for `on run`, in the
     // order the shell script reads its positional parameters. Kept separate so
     // the ordering can be checked without raising an authorization prompt.
@@ -116,13 +166,17 @@ actor PrivilegedRunner {
         for request: Request,
         script: URL,
         log: URL,
-        cancel: URL
+        cancel: URL,
+        ready: URL,
+        heartbeat: URL
     ) -> [String] {
         [
             "-e", appleScript,
             script.path,
             log.path,
             cancel.path,
+            ready.path,
+            heartbeat.path,
             request.preparation.kind,
             request.preparation.source,
             request.applicationURL.path,
@@ -153,6 +207,20 @@ actor PrivilegedRunner {
     // MARK: - Output
 
     private static let pollInterval: UInt64 = 250_000_000
+    // Well inside the two minutes the parked step allows between touches.
+    private static let heartbeatInterval: UInt64 = 10_000_000_000
+
+    // Proof that the app is still there. A step parked on the ready file would
+    // otherwise sit as root for as long as the machine stayed on.
+    private static func beat(_ heartbeatURL: URL) async {
+        while !Task.isCancelled {
+            try? FileManager.default.setAttributes(
+                [.modificationDate: Date()],
+                ofItemAtPath: heartbeatURL.path
+            )
+            try? await Task.sleep(nanoseconds: heartbeatInterval)
+        }
+    }
 
     private static func tail(
         _ logURL: URL,
@@ -182,6 +250,13 @@ actor PrivilegedRunner {
         // deliberate choice rather than something that went wrong.
         if reported.contains("User canceled") || reported.contains("-128") {
             return PrivilegedError.authorizationRefused
+        }
+
+        // TCC refuses the bless - and only the bless - when the app that started
+        // createinstallmedia has no Full Disk Access. The drive is written by
+        // then, which is what makes the tool's own message so hard to place.
+        if text.contains("bless of the installer disk failed") {
+            return PrivilegedError.accessRefused
         }
 
         let detail = text
@@ -215,15 +290,17 @@ actor PrivilegedRunner {
     # CrossBoot privileged step. See PrivilegedRunner.swift.
     set -u
 
-    LOG="$1"
-    CANCEL="$2"
-    KIND="$3"
-    SOURCE="$4"
-    APP="$5"
-    DEVICE="$6"
-    VOLUME="$7"
-    EXPECTED_SIZE="$8"
-    CLEANUP="$9"
+    LOG="$1"; shift
+    CANCEL="$1"; shift
+    READY="$1"; shift
+    HEARTBEAT="$1"; shift
+    KIND="$1"; shift
+    SOURCE="$1"; shift
+    APP="$1"; shift
+    DEVICE="$1"; shift
+    VOLUME="$1"; shift
+    EXPECTED_SIZE="$1"; shift
+    CLEANUP="$1"
 
     exec >>"$LOG" 2>&1
 
@@ -236,6 +313,26 @@ actor PrivilegedRunner {
             exit 65
             ;;
     esac
+
+    # The password was asked for when the run started, but what this step writes
+    # is only downloaded afterwards. Waiting here is what keeps the prompt at the
+    # start of a run rather than an hour into one.
+    echo "CrossBoot: waiting"
+    while [ ! -e "$READY" ]; do
+        if [ -e "$CANCEL" ]; then
+            echo "CrossBoot: stopped"
+            exit 130
+        fi
+
+        # The app touches the heartbeat while it works. Nothing else ends this
+        # wait if the app is killed, and root must not be left parked here.
+        if [ ! -e "$HEARTBEAT" ] || [ -n "$(/usr/bin/find "$HEARTBEAT" -mmin +2)" ]; then
+            echo "CrossBoot: the app stopped answering"
+            exit 75
+        fi
+
+        sleep 1
+    done
 
     # Runs one command in the background so the cancel sentinel can end it.
     # The app runs unprivileged and cannot signal a root process, so stopping
@@ -337,12 +434,17 @@ actor PrivilegedRunner {
 
 enum PrivilegedError: LocalizedError, Equatable {
     case authorizationRefused
+    case accessRefused
     case stepFailed(String)
 
     var errorDescription: String? {
         switch self {
         case .authorizationRefused:
             return "Writing a macOS installer needs an administrator password. Nothing was erased."
+        case .accessRefused:
+            return """
+            macOS blocked the last step: the drive was written but could not be made bootable.             Give CrossBoot Full Disk Access in System Settings > Privacy & Security, reopen the app,             and run again.
+            """
         case .stepFailed(let detail):
             return detail
         }
