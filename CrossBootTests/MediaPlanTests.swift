@@ -237,6 +237,15 @@ final class MediaPlanTests: XCTestCase {
         XCTAssertEqual(InstallMediaPlan.work(for: iso), .copyWhole)
     }
 
+    // FAT32 tops out one byte below 4 GiB, so a file of exactly 4 GiB has to be
+    // split. Treating the limit as inclusive let that file through, to fail
+    // mid-copy on a drive that was already erased.
+    func testAnImageOfExactlyFourGiBIsSplit() throws {
+        let iso = try makeISO("Win11.iso", build: 26100, imageBytes: 4 * 1024 * 1024 * 1024)
+
+        XCTAssertEqual(InstallMediaPlan.work(for: iso), .split)
+    }
+
     // install.esd is solid, and wimlib cannot split solid resources at all. It
     // has to be rewritten first, whatever the file happens to be named.
     func testAnOversizedSolidImageIsRewrittenBeforeItIsSplit() throws {

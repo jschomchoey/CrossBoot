@@ -6,11 +6,11 @@ actor WimLibService {
 
     private init() {}
 
-    // FAT32 caps a single file at 4 GiB; the margin leaves room for the
-    // per-part headers wimlib writes.
+    // The largest file FAT32 can address is 4 GiB minus one byte; the part size
+    // leaves room below that for the per-part headers wimlib writes.
     private static let partSizeMB = 3800
 
-    static let fat32FileLimit: Int64 = 4 * 1024 * 1024 * 1024
+    static let fat32FileLimit: Int64 = 4 * 1024 * 1024 * 1024 - 1
 
     // What an export writes, and under which name.
     enum ImageSelection {
