@@ -39,8 +39,7 @@ final class PrivilegedStepTests: XCTestCase {
     func testArgumentsArriveInThePositionsTheScriptReads() {
         let arguments = argv(request())
 
-        XCTAssertEqual(arguments[0], "-e")
-        XCTAssertEqual(Array(arguments.dropFirst(2)), [
+        XCTAssertEqual(arguments, [
             "/tmp/work/run.sh",
             "/tmp/work/run.log",
             "/tmp/work/cancel",
@@ -57,8 +56,8 @@ final class PrivilegedStepTests: XCTestCase {
     }
 
     func testEachPreparationNamesItsOwnKindAndSource() {
-        XCTAssertEqual(argv(request(preparation: .fetch(version: "13.7.8")))[7...8].map { $0 }, ["fetch", "13.7.8"])
-        XCTAssertEqual(argv(request(preparation: .application))[7...8].map { $0 }, ["application", ""])
+        XCTAssertEqual(argv(request(preparation: .fetch(version: "13.7.8")))[5...6].map { $0 }, ["fetch", "13.7.8"])
+        XCTAssertEqual(argv(request(preparation: .application))[5...6].map { $0 }, ["application", ""])
     }
 
     func testRemovingThePreparedInstallerIsOptedInto() {

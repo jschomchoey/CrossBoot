@@ -1,4 +1,5 @@
 import Foundation
+import CoreServices
 
 // Runs the one part of a macOS run that needs root: Apple's createinstallmedia,
 // and the installer step that has to precede it.
@@ -6,7 +7,15 @@ import Foundation
 // The app is not signed with a Developer ID, so SMAppService and SMJobBless -
 // which install a privileged helper - cannot be used, and
 // AuthorizationExecuteWithPrivileges is long gone from the SDK. That leaves one
-// authorization prompt per run, raised through osascript.
+// authorization prompt per run, raised through AppleScript.
+//
+// The script is compiled and run inside this app rather than handed to
+// /usr/bin/osascript. macOS holds whoever raised the prompt responsible for
+// what the root process then does - the prompt says so by name - and TCC
+// answers that process with the responsible app's permissions. Launched
+// through osascript, the step is osascript's, and the Full Disk Access the user
+// granted CrossBoot never reaches createinstallmedia: the drive is written and
+// then cannot be blessed.
 //
 // The prompt is raised when the run starts, not when the drive is written: the
 // step parks itself on a sentinel file and the app lets it go once the installer
@@ -19,8 +28,6 @@ import Foundation
 // same guarantee ShellHelper gives the unprivileged commands.
 actor PrivilegedRunner {
     static let shared = PrivilegedRunner()
-
-    private static let osascript = "/usr/bin/osascript"
 
     private init() {}
 
@@ -107,8 +114,8 @@ actor PrivilegedRunner {
         do {
             try await withThrowingTaskGroup(of: Void.self) { group in
                 group.addTask {
-                    _ = try await withTaskCancellationHandler {
-                        try await ShellHelper.run(Self.osascript, arguments)
+                    try await withTaskCancellationHandler {
+                        try await Self.elevate(arguments)
                     } onCancel: {
                         // The privileged step runs as root and cannot be
                         // signalled from here, so it polls for this file and
@@ -161,9 +168,9 @@ actor PrivilegedRunner {
         let underlying: Error
     }
 
-    // Everything after "-e" and the script text is argv for `on run`, in the
-    // order the shell script reads its positional parameters. Kept separate so
-    // the ordering can be checked without raising an authorization prompt.
+    // What `on run` receives, in the order the shell script reads its positional
+    // parameters. Kept separate so the ordering can be checked without raising
+    // an authorization prompt.
     static func arguments(
         for request: Request,
         script: URL,
@@ -173,7 +180,6 @@ actor PrivilegedRunner {
         heartbeat: URL
     ) -> [String] {
         [
-            "-e", appleScript,
             script.path,
             log.path,
             cancel.path,
@@ -187,6 +193,64 @@ actor PrivilegedRunner {
             String(request.driveSizeBytes),
             request.removesPreparedInstaller ? "yes" : "no"
         ]
+    }
+
+    // MARK: - Elevation
+
+    // NSAppleScript is not thread-safe and the call blocks for as long as the
+    // step runs, which is the whole point: one queue owns it.
+    private static let scripting = DispatchQueue(label: "com.crossboot.privileged-step")
+
+    private static func elevate(_ argv: [String]) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            scripting.async {
+                guard let script = NSAppleScript(source: appleScript) else {
+                    continuation.resume(throwing: PrivilegedError.stepFailed("The privileged step could not be compiled."))
+                    return
+                }
+
+                var failure: NSDictionary?
+                script.executeAppleEvent(runEvent(argv), error: &failure)
+
+                guard let failure else {
+                    continuation.resume()
+                    return
+                }
+
+                continuation.resume(throwing: ScriptFailure(
+                    number: failure[NSAppleScript.errorNumber] as? Int ?? 0,
+                    message: failure[NSAppleScript.errorMessage] as? String ?? ""
+                ))
+            }
+        }
+    }
+
+    // `on run argv` is reached by sending the script the event AppleScript would
+    // have sent it, with the arguments as the event's direct object - the same
+    // values osascript passed, without a command line to quote them on.
+    private static func runEvent(_ argv: [String]) -> NSAppleEventDescriptor {
+        let arguments = NSAppleEventDescriptor.list()
+        for (index, value) in argv.enumerated() {
+            arguments.insert(NSAppleEventDescriptor(string: value), at: index + 1)
+        }
+
+        let event = NSAppleEventDescriptor(
+            eventClass: AEEventClass(kCoreEventClass),
+            eventID: AEEventID(kAEOpenApplication),
+            targetDescriptor: NSAppleEventDescriptor(processIdentifier: ProcessInfo.processInfo.processIdentifier),
+            returnID: AEReturnID(kAutoGenerateReturnID),
+            transactionID: AETransactionID(kAnyTransactionID)
+        )
+        event.setParam(arguments, forKeyword: AEKeyword(keyDirectObject))
+
+        return event
+    }
+
+    // What AppleScript reported: the shell exit status, or -128 when the user
+    // dismissed the authorization prompt.
+    private struct ScriptFailure: Error {
+        let number: Int
+        let message: String
     }
 
     // MARK: - Scratch
@@ -246,11 +310,12 @@ actor PrivilegedRunner {
 
     private static func failure(_ error: Error, log logURL: URL) -> Error {
         let text = (try? String(contentsOf: logURL, encoding: .utf8)) ?? ""
-        let reported = error.localizedDescription
+        let script = error as? ScriptFailure
+        let reported = script?.message ?? error.localizedDescription
 
-        // osascript reports a dismissed authorization dialog as -128, which is a
+        // A dismissed authorization dialog is reported as -128, which is a
         // deliberate choice rather than something that went wrong.
-        if reported.contains("User canceled") || reported.contains("-128") {
+        if script?.number == -128 || reported.contains("User canceled") || reported.contains("-128") {
             return PrivilegedError.authorizationRefused
         }
 
