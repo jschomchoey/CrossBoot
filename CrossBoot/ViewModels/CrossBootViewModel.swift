@@ -43,11 +43,11 @@ class CrossBootViewModel: ObservableObject {
     // The catalog is fetched once per launch; it is a 7 MB list plus one small
     // file per product, and it does not change while the app is open.
     var loadedVersions = false
-    // Installers the user pointed at, kept across a refresh of the fetched list.
-    var localInstallers: [MacOSInstaller] = []
-    // What the catalog and softwareupdate last reported, kept so adding a local
-    // installer does not mean fetching either of them again.
-    var remoteInstallers: [MacOSInstaller] = []
+    // Installers the user pointed at, kept across a refresh of the found list.
+    var addedInstallers: [MacOSInstaller] = []
+    // What Apple's catalog, softwareupdate and /Applications last reported, kept
+    // so adding an installer by hand does not mean asking any of them again.
+    var offeredInstallers: [MacOSInstaller] = []
 
     // Analysis runs one batch at a time, in the order the batches arrived.
     private var analysisTask: Task<Void, Never>?

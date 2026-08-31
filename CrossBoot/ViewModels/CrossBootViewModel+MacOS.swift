@@ -12,7 +12,8 @@ extension CrossBootViewModel {
     // Apple's catalog is the list that matters: it is not filtered by hardware,
     // so it reaches releases older and newer than the one this Mac is offered.
     // softwareupdate is asked alongside it only to fill in anything the catalog
-    // did not carry, and neither is allowed to fail the other.
+    // did not carry, /Applications is read for what this Mac already has, and
+    // none of the three is allowed to fail the others.
     func loadMacOSVersions(refresh: Bool = false) async {
         guard !isLoadingVersions, refresh || !loadedVersions else { return }
 
@@ -21,6 +22,9 @@ extension CrossBootViewModel {
 
         let catalog = Task { try await SoftwareCatalog.shared.installers(refresh: refresh) }
         let offered = Task { try await InstallerSource.softwareUpdateInstallers() }
+        // Reading a bundle walks it for its size, which is not the main thread's
+        // work while the list is being drawn.
+        let installed = Task.detached { InstallerSource.installedApplications() }
 
         var problem: String?
         var fetched: [MacOSInstaller] = []
@@ -33,13 +37,15 @@ extension CrossBootViewModel {
         }
 
         let listed = (try? await offered.value) ?? []
+        let onDisk = await installed.value
 
-        remoteInstallers = (fetched + listed).sorted { $0.version > $1.version }
+        offeredInstallers = (fetched + listed + onDisk).sorted { $0.version > $1.version }
         refreshVersionList()
 
         // A catalog that could not be reached still leaves whatever the user
-        // added and whatever softwareupdate offered, so it is only worth
-        // reporting when it left the list with nothing in it.
+        // added, whatever softwareupdate offered and whatever is already in
+        // /Applications, so it is only worth reporting when it left the list
+        // with nothing in it.
         inputError = macOSVersions.isEmpty ? (problem ?? CatalogError.empty.localizedDescription) : nil
         loadedVersions = !macOSVersions.isEmpty
     }
@@ -65,12 +71,12 @@ extension CrossBootViewModel {
         Task { await readInstallers(urls) }
     }
 
-    // Only what the user added can be taken back out; the fetched list is what
-    // Apple publishes.
+    // Only what the user added can be taken back out; the rest is what CrossBoot
+    // found for itself, and a refresh would list it again.
     func removeInstaller(_ installer: MacOSInstaller) {
         guard !processState.isProcessing else { return }
 
-        localInstallers.removeAll { $0.id == installer.id }
+        addedInstallers.removeAll { $0.id == installer.id }
         if selectedVersion?.id == installer.id { selectedVersion = nil }
 
         refreshVersionList()
@@ -78,7 +84,7 @@ extension CrossBootViewModel {
     }
 
     func isRemovable(_ installer: MacOSInstaller) -> Bool {
-        localInstallers.contains { $0.id == installer.id }
+        addedInstallers.contains { $0.id == installer.id }
     }
 
     private func readInstallers(_ urls: [URL]) async {
@@ -91,9 +97,9 @@ extension CrossBootViewModel {
             do {
                 let installer = try await Self.installer(at: url)
 
-                guard !localInstallers.contains(where: { $0.id == installer.id }) else { continue }
+                guard !addedInstallers.contains(where: { $0.id == installer.id }) else { continue }
 
-                localInstallers.append(installer)
+                addedInstallers.append(installer)
                 selectedVersion = installer
             } catch {
                 Log.process.error("Could not read installer: \(error.localizedDescription, privacy: .public)")
@@ -118,13 +124,27 @@ extension CrossBootViewModel {
 
     // What the user added goes first - it needs no download - and the rest stays
     // newest first. The same release reaches the list from more than one source,
-    // so it is shown once.
+    // so it is shown once, as the copy that costs the least to use: a release
+    // sitting in /Applications must not be offered as an 18 GB download.
     func refreshVersionList() {
-        var seen: Set<String> = []
+        var chosen: [String: MacOSInstaller] = [:]
+        var order: [String] = []
 
-        macOSVersions = (localInstallers + remoteInstallers).filter { installer in
-            seen.insert("\(installer.name) \(installer.version) \(installer.build)").inserted
+        for installer in addedInstallers + offeredInstallers {
+            let release = "\(installer.name) \(installer.version) \(installer.build)"
+
+            guard let listed = chosen[release] else {
+                chosen[release] = installer
+                order.append(release)
+                continue
+            }
+
+            if installer.origin.isOnDisk, !listed.origin.isOnDisk {
+                chosen[release] = installer
+            }
         }
+
+        macOSVersions = order.compactMap { chosen[$0] }
 
         if let selected = selectedVersion, !macOSVersions.contains(where: { $0.id == selected.id }) {
             selectedVersion = nil

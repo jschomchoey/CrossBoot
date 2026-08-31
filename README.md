@@ -81,13 +81,16 @@ downloads the installer and hands it to Apple's own `createinstallmedia`.
 
 `softwareupdate --list-full-installers` answers with what Apple serves *your* machine, so it can never offer a
 release newer than the one you are entitled to. CrossBoot reads Apple's software update catalog directly
-instead, which is not filtered by hardware, so both older and newer releases are listed. Three sources feed the
+instead, which is not filtered by hardware, so both older and newer releases are listed. Four sources feed the
 list:
 
 - **Apple's catalog** - every `InstallAssistant.pkg` Apple publishes, roughly 12 GB to 18 GB each.
 - **Software Update** - what `softwareupdate` offers this Mac, used only for anything the catalog did not carry.
-- **A local installer** - an `Install macOS X.app` or an `InstallAssistant.pkg` you already have, dropped on the
-  window or chosen from the menu beside **macOS Version**.
+- **/Applications** - an `Install macOS X.app` already on this Mac, left by an earlier run or by Apple's own
+  download. It is listed as **Local installer** and used as it is, so a release you already have is never
+  offered as a download again.
+- **A local installer** - an `Install macOS X.app` or an `InstallAssistant.pkg` kept anywhere else, dropped on
+  the window or chosen from the menu beside **macOS Version**.
 
 The version menu marks the releases this Mac cannot build, and picking one says why. Two limits are enforced
 before anything is erased:

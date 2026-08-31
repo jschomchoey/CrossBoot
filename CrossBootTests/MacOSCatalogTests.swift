@@ -161,6 +161,94 @@ final class MacOSCatalogTests: XCTestCase {
         XCTAssertEqual(installers.map(\.name), ["macOS Tahoe", "macOS Sequoia"])
     }
 
+    // MARK: - Installers already on this Mac
+
+    // An installer left in /Applications by an earlier run is 12-18 GB that has
+    // already been paid for, so the list has to find it without being told.
+    func testInstallersAlreadyInApplicationsAreFound() throws {
+        let applications = try makeApplicationsDirectory()
+        try makeInstaller(named: "Install macOS Sequoia", version: "15.7.9", build: "24G818", in: applications)
+
+        let found = InstallerSource.installedApplications(in: applications)
+
+        XCTAssertEqual(found.count, 1)
+        XCTAssertEqual(found.first?.name, "macOS Sequoia")
+        XCTAssertEqual(found.first?.version, MacOSVersion([15, 7, 9]))
+        XCTAssertEqual(found.first?.build, "24G818")
+        XCTAssertEqual(found.first?.origin.isOnDisk, true)
+    }
+
+    // Everything else in /Applications is somebody's ordinary app, and a folder
+    // that only looks like an installer cannot write a drive.
+    func testOnlyRealInstallerApplicationsAreFound() throws {
+        let applications = try makeApplicationsDirectory()
+        try makeInstaller(named: "Install macOS Sequoia", version: "15.7.9", build: "24G818", in: applications)
+        try makeInstaller(named: "Safari", version: "26.0", build: "25A354", in: applications)
+        try makeInstaller(
+            named: "Install macOS Hollow",
+            version: "15.0",
+            build: "24A335",
+            in: applications,
+            createInstallMedia: false
+        )
+
+        XCTAssertEqual(InstallerSource.installedApplications(in: applications).map(\.name), ["macOS Sequoia"])
+    }
+
+    func testNothingIsFoundWhereThereIsNothingToFind() throws {
+        let applications = try makeApplicationsDirectory()
+
+        XCTAssertTrue(InstallerSource.installedApplications(in: applications).isEmpty)
+        XCTAssertTrue(InstallerSource.installedApplications(in: applications.appendingPathComponent("gone")).isEmpty)
+    }
+
+    private func makeApplicationsDirectory() throws -> URL {
+        let directory = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("crossboot-applications-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        addTeardownBlock { try? FileManager.default.removeItem(at: directory) }
+
+        return directory
+    }
+
+    private func makeInstaller(
+        named name: String,
+        version: String,
+        build: String,
+        in directory: URL,
+        createInstallMedia: Bool = true
+    ) throws {
+        let contents = directory
+            .appendingPathComponent("\(name).app")
+            .appendingPathComponent("Contents")
+        let shared = contents.appendingPathComponent("SharedSupport")
+        try FileManager.default.createDirectory(at: shared, withIntermediateDirectories: true)
+
+        if createInstallMedia {
+            let resources = contents.appendingPathComponent("Resources")
+            try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: true)
+            FileManager.default.createFile(
+                atPath: resources.appendingPathComponent("createinstallmedia").path,
+                contents: nil
+            )
+        }
+
+        try write(
+            ["CFBundleDisplayName": name],
+            to: contents.appendingPathComponent("Info.plist")
+        )
+
+        try write(
+            ["Assets": [["OSVersion": version, "Build": build]]],
+            to: shared.appendingPathComponent("com_apple_MobileAsset_MacSoftwareUpdate.xml")
+        )
+    }
+
+    private func write(_ plist: [String: Any], to url: URL) throws {
+        let data = try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
+        try data.write(to: url)
+    }
+
     func testNonListingOutputProducesNoInstallers() {
         XCTAssertTrue(InstallerSource.parseFullInstallers("").isEmpty)
         XCTAssertTrue(InstallerSource.parseFullInstallers("Finding available software\nNo updates.").isEmpty)

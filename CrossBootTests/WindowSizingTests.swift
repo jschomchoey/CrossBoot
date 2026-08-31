@@ -151,7 +151,7 @@ final class WindowSizingTests: XCTestCase {
         // An installer the user pointed at is the one entry the section menu
         // offers to remove, and it summarizes without a download.
         if local {
-            model.localInstallers = [
+            model.addedInstallers = [
                 MacOSInstaller(
                     name: "macOS Tahoe",
                     version: MacOSVersion([26, 6, 2]),
@@ -163,7 +163,7 @@ final class WindowSizingTests: XCTestCase {
             ]
         }
 
-        model.remoteInstallers = (0..<versions).map { index in
+        model.offeredInstallers = (0..<versions).map { index in
             MacOSInstaller(
                 name: "macOS Release \(index)",
                 version: MacOSVersion([26 - index, 6, 2]),

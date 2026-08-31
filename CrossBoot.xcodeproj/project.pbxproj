@@ -37,6 +37,7 @@
 		054 /* MacOSMediaPlanTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 154 /* MacOSMediaPlanTests.swift */; };
 		055 /* PrivilegedStepTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 155 /* PrivilegedStepTests.swift */; };
 		059 /* TransferRateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 159 /* TransferRateTests.swift */; };
+		061 /* MacOSVersionListTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 161 /* MacOSVersionListTests.swift */; };
 		056 /* CreateInstallMediaOutputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 156 /* CreateInstallMediaOutputTests.swift */; };
 		036 /* MediaBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 136 /* MediaBuilder.swift */; };
 		040 /* MediaKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = 140 /* MediaKind.swift */; };
@@ -90,6 +91,7 @@
 		154 /* MacOSMediaPlanTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacOSMediaPlanTests.swift; sourceTree = "<group>"; };
 		155 /* PrivilegedStepTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivilegedStepTests.swift; sourceTree = "<group>"; };
 		159 /* TransferRateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferRateTests.swift; sourceTree = "<group>"; };
+		161 /* MacOSVersionListTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacOSVersionListTests.swift; sourceTree = "<group>"; };
 		156 /* CreateInstallMediaOutputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateInstallMediaOutputTests.swift; sourceTree = "<group>"; };
 		136 /* MediaBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaBuilder.swift; sourceTree = "<group>"; };
 		140 /* MediaKind.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaKind.swift; sourceTree = "<group>"; };
@@ -242,6 +244,7 @@
 				154 /* MacOSMediaPlanTests.swift */,
 				155 /* PrivilegedStepTests.swift */,
 				159 /* TransferRateTests.swift */,
+				161 /* MacOSVersionListTests.swift */,
 				156 /* CreateInstallMediaOutputTests.swift */,
 			);
 			path = CrossBootTests;
@@ -407,6 +410,7 @@
 				054 /* MacOSMediaPlanTests.swift in Sources */,
 				055 /* PrivilegedStepTests.swift in Sources */,
 				059 /* TransferRateTests.swift in Sources */,
+				061 /* MacOSVersionListTests.swift in Sources */,
 				056 /* CreateInstallMediaOutputTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

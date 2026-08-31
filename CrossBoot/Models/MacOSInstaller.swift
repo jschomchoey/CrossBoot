@@ -27,6 +27,16 @@ struct MacOSInstaller: Identifiable, Hashable {
             case .package: return "Local package"
             }
         }
+
+        // Whether the installer is already on this Mac. The same release often
+        // reaches the list from more than one source, and one that costs no
+        // download is not the same offer as one that costs 18 GB.
+        var isOnDisk: Bool {
+            switch self {
+            case .application, .package: return true
+            case .catalog, .softwareUpdate: return false
+            }
+        }
     }
 
     // As Apple titles it: "macOS Tahoe", "macOS Ventura".

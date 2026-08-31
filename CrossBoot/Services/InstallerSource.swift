@@ -73,6 +73,28 @@ enum InstallerSource {
         return displayed.hasPrefix("Install ") ? String(displayed.dropFirst("Install ".count)) : displayed
     }
 
+    // Installers already expanded into /Applications, left there by an earlier
+    // run or by Apple's own download. One of these costs nothing to use, so the
+    // list has to know about them rather than offering the same release again as
+    // a download.
+    //
+    // Reading each bundle walks it for its size, so this belongs off the main
+    // thread with the other two sources.
+    static func installedApplications(in directory: URL = URL(fileURLWithPath: "/Applications")) -> [MacOSInstaller] {
+        let contents = (try? FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles, .skipsSubdirectoryDescendants]
+        )) ?? []
+
+        return contents
+            // Apple names every one of them this way, and the alternative is
+            // reading the Info.plist of every application on the Mac.
+            .filter { $0.pathExtension == "app" && $0.lastPathComponent.hasPrefix("Install macOS ") }
+            .compactMap { try? installer(atApplication: $0) }
+            .sorted { $0.version > $1.version }
+    }
+
     // MARK: - Local InstallAssistant package
 
     // A flat package carries the same distribution file the catalog serves, so
