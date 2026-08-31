@@ -127,54 +127,98 @@ final class MediaBuilder {
     ) async throws -> PreparedSources {
         switch plan.mode {
         case .single(let iso):
-            // One ISO is copied as it is; only an image too big for FAT32
-            // needs splitting first.
-            guard let image = iso.installImage,
-                  image.sizeBytes > WimLibService.fat32FileLimit,
-                  let mount = mounts[iso.url] else {
-                return (nil, [], Milestone.mounted)
-            }
+            return try await prepareLoneISO(iso, mounts: mounts)
+        case .merged(let base, let groups, let compression):
+            return try await prepareMerge(base: base, groups: groups, compression: compression, mounts: mounts)
+        }
+    }
 
-            let wimPath = (mount as NSString).appendingPathComponent(image.relativePath)
+    private func prepareLoneISO(_ iso: ISOFile, mounts: [URL: String]) async throws -> PreparedSources {
+        guard let image = iso.installImage, let mount = mounts[iso.url] else {
+            return (nil, [], Milestone.mounted)
+        }
+
+        let wimPath = (mount as NSString).appendingPathComponent(image.relativePath)
+        let excluded: Set<String> = [image.relativePath.lowercased()]
+
+        switch InstallMediaPlan.work(for: iso) {
+        case .copyWhole:
+            // The ISO is copied as it is, install image included.
+            return (nil, [], Milestone.mounted)
+
+        case .split:
             let splitEnd = Milestone.mounted + Milestone.splitShare
             let parts = try await splitInstallImage(at: wimPath, from: Milestone.mounted, to: splitEnd)
 
-            return (parts, [image.relativePath.lowercased()], splitEnd)
+            return (parts, excluded, splitEnd)
 
-        case .merged(let base, let groups, let compression):
-            var excluded: Set<String> = []
-            if let image = base.installImage {
-                excluded.insert(image.relativePath.lowercased())
-            }
-            // ei.cfg pins setup to a single edition and hides the picker, which
-            // is the whole point of merged media.
-            excluded.insert("sources/ei.cfg")
-
-            state.stage = .merging
-
+        case .rebuild(let compression):
+            // Solid is what consumer media ships as install.esd, and wimlib
+            // cannot split a solid image at all. It is rewritten whole first -
+            // same editions, same names - and the rewrite is what gets split.
             let workDirectory = try await isoHandler.makeTemporaryDirectory()
-            let merged = workDirectory.appendingPathComponent("install.wim")
+            let rebuilt = workDirectory.appendingPathComponent("install.wim")
 
-            try await mergeImages(groups, compression: compression, mounts: mounts, into: merged)
+            state.stage = .rebuilding
+            state.currentFile = ""
 
-            guard Self.fileSize(at: merged) > WimLibService.fat32FileLimit else {
-                return (workDirectory, excluded, Milestone.rebuildEnd)
+            try await wimLibService.export(.all, from: wimPath, to: rebuilt, compression: compression) { [weak self] percent in
+                self?.state.progress = Self.overallProgress(
+                    Double(percent),
+                    from: Milestone.mounted,
+                    to: Milestone.rebuildEnd
+                )
             }
 
             let splitEnd = Milestone.rebuildEnd + Milestone.splitShare
-            let parts = try await splitInstallImage(at: merged.path, from: Milestone.rebuildEnd, to: splitEnd)
+            let parts = try await splitInstallImage(at: rebuilt.path, from: Milestone.rebuildEnd, to: splitEnd)
 
-            // The merged image was only an input to the split; dropping it now
-            // frees its space before the copy starts.
-            await isoHandler.removeItem(at: merged)
+            // The rewrite was only an input to the split; dropping it now frees
+            // its space before the copy starts.
+            await isoHandler.removeItem(at: rebuilt)
 
             return (parts, excluded, splitEnd)
         }
     }
 
+    private func prepareMerge(
+        base: ISOFile,
+        groups: [InstallMediaPlan.SourceGroup],
+        compression: WimCompression,
+        mounts: [URL: String]
+    ) async throws -> PreparedSources {
+        var excluded: Set<String> = []
+        if let image = base.installImage {
+            excluded.insert(image.relativePath.lowercased())
+        }
+        // ei.cfg pins setup to a single edition and hides the picker, which is
+        // the whole point of merged media.
+        excluded.insert("sources/ei.cfg")
+
+        state.stage = .merging
+
+        let workDirectory = try await isoHandler.makeTemporaryDirectory()
+        let merged = workDirectory.appendingPathComponent("install.wim")
+
+        try await mergeImages(groups, compression: compression, mounts: mounts, into: merged)
+
+        guard Self.fileSize(at: merged) > WimLibService.fat32FileLimit else {
+            return (workDirectory, excluded, Milestone.rebuildEnd)
+        }
+
+        let splitEnd = Milestone.rebuildEnd + Milestone.splitShare
+        let parts = try await splitInstallImage(at: merged.path, from: Milestone.rebuildEnd, to: splitEnd)
+
+        // The merged image was only an input to the split; dropping it now
+        // frees its space before the copy starts.
+        await isoHandler.removeItem(at: merged)
+
+        return (parts, excluded, splitEnd)
+    }
+
     private func mergeImages(
         _ groups: [InstallMediaPlan.SourceGroup],
-        compression: WimLibService.Compression,
+        compression: WimCompression,
         mounts: [URL: String],
         into destination: URL
     ) async throws {
@@ -196,10 +240,9 @@ final class MediaBuilder {
                 let alreadyDone = completedWeight
 
                 try await wimLibService.export(
-                    image: planned.index,
+                    .one(index: planned.index, name: planned.name),
                     from: wimPath,
                     to: destination,
-                    named: planned.name,
                     compression: compression
                 ) { [weak self] percent in
                     guard let self else { return }

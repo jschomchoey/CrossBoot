@@ -12,19 +12,11 @@ actor WimLibService {
 
     static let fat32FileLimit: Int64 = 4 * 1024 * 1024 * 1024
 
-    // Compression of a merged image. Exporting into the format that already
-    // holds most of the bytes lets wimlib copy blobs across instead of
-    // recompressing them, which is the difference between minutes and hours.
-    enum Compression {
-        case lzx
-        case solid
-
-        var argument: String {
-            switch self {
-            case .lzx: return "--compress=LZX"
-            case .solid: return "--solid"
-            }
-        }
+    // What an export writes, and under which name.
+    enum ImageSelection {
+        // Every image in the source, keeping the names it already has.
+        case all
+        case one(index: Int, name: String)
     }
 
     // What an inspection pass learned about a WIM without unpacking it.
@@ -60,20 +52,29 @@ actor WimLibService {
         return WimCompression(reported: String(value ?? ""))
     }
 
-    // Append one source image to `destination`, creating it on the first call.
+    // Append source images to `destination`, creating it on the first call.
     // Only the first export decides the compression; later ones must match, so
     // the same value has to be passed every time.
     func export(
-        image index: Int,
+        _ selection: ImageSelection,
         from wimPath: String,
         to destination: URL,
-        named name: String,
-        compression: Compression,
+        compression: WimCompression,
         onProgress: @escaping @Sendable @MainActor (Int) -> Void
     ) async throws {
+        // wimlib takes the destination before the new name: SRC IMAGE DEST NAME.
+        var arguments = ["export", wimPath]
+        switch selection {
+        case .all:
+            arguments += ["all", destination.path]
+        case .one(let index, let name):
+            arguments += [String(index), destination.path, name]
+        }
+        arguments.append(compression.exportArgument)
+
         try await run(
-            ["export", wimPath, String(index), destination.path, name, compression.argument],
-            operation: "Merging install images",
+            arguments,
+            operation: "Rewriting the install image",
             onProgress: onProgress
         )
     }

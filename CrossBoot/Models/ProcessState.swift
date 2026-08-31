@@ -6,6 +6,7 @@ enum ProcessStage: Equatable {
     case formatting
     case analyzing
     case merging
+    case rebuilding
     case splitting
     case copying
     case aborting
@@ -20,6 +21,7 @@ enum ProcessStage: Equatable {
         case .formatting: return "Formatting the drive"
         case .analyzing: return "Analyzing the ISO"
         case .merging: return "Merging Windows versions"
+        case .rebuilding: return "Rewriting the install image"
         case .splitting: return "Splitting install.wim"
         case .copying: return "Copying files"
         case .aborting: return "Stopping"
@@ -45,7 +47,7 @@ struct ProcessState {
         switch stage {
         case .idle, .done, .aborted, .error:
             return false
-        case .formatting, .analyzing, .merging, .splitting, .copying, .aborting:
+        case .formatting, .analyzing, .merging, .rebuilding, .splitting, .copying, .aborting:
             return true
         }
     }

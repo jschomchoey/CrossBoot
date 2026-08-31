@@ -183,6 +183,74 @@ final class MediaPlanTests: XCTestCase {
         }
     }
 
+    // MARK: - Compression
+
+    // The merged image is all but always over the FAT32 limit, so it has to be
+    // splittable - and wimlib refuses to split a WIM holding solid resources.
+    // Choosing solid here fails the run at the split, hours in.
+    func testMergedMediaIsNeverSolid() throws {
+        let win10 = try makeISO("Win10.iso", build: 19045, compression: .lzms)
+        let win11 = try makeISO("Win11.iso", build: 26100, compression: .lzms)
+
+        let plan = try InstallMediaPlan.make(from: [win10, win11])
+
+        guard case .merged(_, _, let compression) = plan.mode else {
+            return XCTFail("two ISOs should merge")
+        }
+
+        XCTAssertTrue(compression.isSplittable)
+        XCTAssertEqual(compression, .lzx)
+    }
+
+    // Matching the format the sources already use lets wimlib copy their data
+    // across instead of recompressing it, which is minutes per edition.
+    func testTheMergedFormatFollowsTheSourcesThatHoldMostOfTheBytes() throws {
+        let mostly = try makeISO("Win11.iso", build: 26100, imageBytes: 6_000_000_000, compression: .xpress)
+        let rest = try makeISO("Win10.iso", build: 19045, imageBytes: 2_000_000_000, compression: .lzx)
+
+        guard case .merged(_, _, let compression) = try InstallMediaPlan.make(from: [mostly, rest]).mode else {
+            return XCTFail("two ISOs should merge")
+        }
+
+        XCTAssertEqual(compression, .xpress)
+    }
+
+    // Nothing can be copied across from a solid source. With the splittable
+    // sources in the minority the merge takes LZX, which is both what Windows
+    // media ships as install.wim and the smaller file on the drive.
+    func testSolidSourcesMergeIntoLZX() throws {
+        let solid = try makeISO("Win11.iso", build: 26100, imageBytes: 6_000_000_000, compression: .lzms)
+        let small = try makeISO("Win10.iso", build: 19045, imageBytes: 1_000_000_000, compression: .xpress)
+
+        guard case .merged(_, _, let compression) = try InstallMediaPlan.make(from: [solid, small]).mode else {
+            return XCTFail("two ISOs should merge")
+        }
+
+        XCTAssertEqual(compression, .lzx)
+    }
+
+    // MARK: - A lone ISO on FAT32
+
+    func testAnImageThatFATCanHoldIsCopiedWhole() throws {
+        let iso = try makeISO("Win11.iso", build: 26100, imageBytes: WimLibService.fat32FileLimit)
+
+        XCTAssertEqual(InstallMediaPlan.work(for: iso), .copyWhole)
+    }
+
+    // install.esd is solid, and wimlib cannot split solid resources at all. It
+    // has to be rewritten first, whatever the file happens to be named.
+    func testAnOversizedSolidImageIsRewrittenBeforeItIsSplit() throws {
+        let iso = try makeISO(
+            "Win11.iso",
+            build: 26100,
+            installImage: "sources/install.esd",
+            imageBytes: 5_000_000_000,
+            compression: .lzms
+        )
+
+        XCTAssertEqual(InstallMediaPlan.work(for: iso), .rebuild(.lzx))
+    }
+
     // MARK: - Sizing
 
     // The check runs before the drive is erased, so it has to be an upper bound:
@@ -212,5 +280,17 @@ final class MediaPlanTests: XCTestCase {
         let iso = try makeISO("Win11.iso", build: 26100, imageBytes: 3_000_000_000)
 
         XCTAssertEqual(try InstallMediaPlan.make(from: [iso]).estimatedTemporaryBytes, 0)
+    }
+
+    // Rewriting a solid image as LZX makes it bigger, and both checks run before
+    // the drive is erased. Counting the source size would pass a drive that the
+    // finished media cannot fit on.
+    func testASolidImageIsCountedAtWhatItWillWeighOnceRewritten() throws {
+        let solid = try makeISO("Win11.iso", build: 26100, imageBytes: 5_000_000_000, compression: .lzms)
+        let plan = try InstallMediaPlan.make(from: [solid])
+
+        XCTAssertEqual(plan.estimatedDriveBytes, 7_500_000_000 + 1 - 5_000_000_000)
+        // The rewrite and the parts split out of it are on disk at once.
+        XCTAssertEqual(plan.estimatedTemporaryBytes, 15_000_000_000)
     }
 }

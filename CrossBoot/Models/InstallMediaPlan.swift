@@ -11,7 +11,7 @@ struct InstallMediaPlan {
         // One ISO: copied as it is, exactly as CrossBoot has always done.
         case single(ISOFile)
         // Several ISOs: base supplies the boot files, groups supply the images.
-        case merged(base: ISOFile, groups: [SourceGroup], compression: WimLibService.Compression)
+        case merged(base: ISOFile, groups: [SourceGroup], compression: WimCompression)
     }
 
     // The images taken from one ISO, kept together so the ISO is mounted once.
@@ -52,31 +52,57 @@ struct InstallMediaPlan {
         }
     }
 
-    // An upper bound on what the drive has to hold: the base ISO without its own
-    // install image, plus every install image being merged in. Deduplication
-    // between images can only make the result smaller.
-    var estimatedDriveBytes: Int64 {
-        let baseTree = base.sizeBytes - (base.installImage?.sizeBytes ?? 0)
+    // What has to happen to a lone ISO's install image before FAT32 can hold it.
+    enum InstallImageWork: Equatable {
+        // It fits, so the ISO is copied exactly as it is.
+        case copyWhole
+        // Too big for FAT32, but splittable in the format it already has.
+        case split
+        // Too big for FAT32 and solid, which wimlib cannot split. It has to be
+        // rewritten in a splittable format first, and only then split.
+        case rebuild(WimCompression)
+    }
 
+    static func work(for iso: ISOFile) -> InstallImageWork {
+        guard let image = iso.installImage, image.sizeBytes > WimLibService.fat32FileLimit else {
+            return .copyWhole
+        }
+
+        return image.compression.isSplittable ? .split : .rebuild(rebuildCompression(for: [image]))
+    }
+
+    // An upper bound on what the drive has to hold: the base ISO without its own
+    // install image, plus every install image being merged in, at the size it
+    // will have once rewritten. Deduplication between images can only make the
+    // result smaller.
+    var estimatedDriveBytes: Int64 {
         switch mode {
         case .single(let iso):
-            return iso.sizeBytes
+            guard case .rebuild = Self.work(for: iso), let image = iso.installImage else {
+                return iso.sizeBytes
+            }
+            // The rewritten image replaces the one already counted in the ISO.
+            return iso.sizeBytes - image.sizeBytes + Self.rebuiltBytes(of: image)
         case .merged(_, let groups, _):
-            return baseTree + groups.reduce(0) { $0 + ($1.source.installImage?.sizeBytes ?? 0) }
+            let baseTree = base.sizeBytes - (base.installImage?.sizeBytes ?? 0)
+            return baseTree + groups.reduce(0) { $0 + Self.rebuiltBytes(of: $1.source.installImage) }
         }
     }
 
-    // Peak scratch space: the merged image, plus the split parts written beside
-    // it before it is deleted.
+    // Peak scratch space: the rewritten image, plus the split parts written
+    // beside it before it is deleted.
     var estimatedTemporaryBytes: Int64 {
         switch mode {
         case .single(let iso):
-            // Only the split parts, and only when the image is too big for FAT32.
-            let image = iso.installImage
-            guard let image, image.sizeBytes > WimLibService.fat32FileLimit else { return 0 }
-            return image.sizeBytes
+            guard let image = iso.installImage else { return 0 }
+
+            switch Self.work(for: iso) {
+            case .copyWhole: return 0
+            case .split: return image.sizeBytes
+            case .rebuild: return Self.rebuiltBytes(of: image) * 2
+            }
         case .merged(_, let groups, _):
-            let merged = groups.reduce(0) { $0 + ($1.source.installImage?.sizeBytes ?? 0) }
+            let merged = groups.reduce(0) { $0 + Self.rebuiltBytes(of: $1.source.installImage) }
             return merged * 2
         }
     }
@@ -144,22 +170,48 @@ struct InstallMediaPlan {
         }
 
         return InstallMediaPlan(
-            mode: .merged(base: base, groups: groups, compression: compression(for: ordered)),
+            mode: .merged(
+                base: base,
+                groups: groups,
+                compression: rebuildCompression(for: groups.compactMap { $0.source.installImage })
+            ),
             sources: sources
         )
     }
 
-    // Recompressing is the expensive part of a merge, so the merged image takes
-    // the format that already holds most of the bytes.
-    private static func compression(for isoFiles: [ISOFile]) -> WimLibService.Compression {
-        let solidBytes: Int64 = isoFiles.reduce(0) { total, iso in
-            guard let image = iso.installImage, !image.compression.isSplittable else { return total }
-            return total + image.sizeBytes
-        }
+    // The format a rewritten install image takes.
+    //
+    // Solid (LZMS) is never a candidate. Merged media is all but always over the
+    // FAT32 limit and therefore has to be split, and wimlib cannot split a WIM
+    // holding solid resources - a solid destination fails the run at the split,
+    // with the drive already erased.
+    //
+    // That leaves LZX and XPRESS. wimlib copies data across untouched when the
+    // destination format matches the source, which on real install media is
+    // about 20 seconds against 2 minutes per edition - so XPRESS wins when most
+    // of the bytes already are XPRESS. Everything else takes LZX: it is what
+    // Windows media ships as install.wim, and it is the smaller of the two on a
+    // drive that has to hold it.
+    static func rebuildCompression(for images: [InstallImage]) -> WimCompression {
+        let allBytes = images.reduce(0) { $0 + $1.sizeBytes }
+        let xpressBytes = images
+            .filter { $0.compression == .xpress }
+            .reduce(0) { $0 + $1.sizeBytes }
 
-        let allBytes: Int64 = isoFiles.reduce(0) { $0 + ($1.installImage?.sizeBytes ?? 0) }
+        return xpressBytes * 2 > allBytes ? .xpress : .lzx
+    }
 
-        return solidBytes * 2 > allBytes ? .solid : .lzx
+    // Rewriting a solid image in a splittable format gives back about half of
+    // what solid compression saved. Every space check runs before the drive is
+    // erased, so it has to expect the bigger file.
+    private static let solidExpansion = 1.5
+
+    private static func rebuiltBytes(of image: InstallImage?) -> Int64 {
+        guard let image else { return 0 }
+
+        return image.compression.isSplittable
+            ? image.sizeBytes
+            : Int64(Double(image.sizeBytes) * solidExpansion)
     }
 }
 
