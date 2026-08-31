@@ -86,7 +86,7 @@ struct ContentView: View {
         .onDrop(of: [.fileURL], isTargeted: dropTarget, perform: handleDrop)
         .overlay(dropHighlight)
         .toolbar {
-            ToolbarItem(placement: .principal) {
+            ToolbarItem(placement: .primaryAction) {
                 modePicker
             }
         }
