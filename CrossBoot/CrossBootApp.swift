@@ -4,7 +4,7 @@ import SwiftUI
 // not vary with what is on screen, so there is nothing to resize it to.
 enum WindowLayout {
     static let width: CGFloat = 460
-    static let height: CGFloat = 788
+    static let height: CGFloat = 738
 }
 
 @main

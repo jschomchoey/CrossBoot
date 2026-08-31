@@ -224,6 +224,13 @@ class CrossBootViewModel: ObservableObject {
 
     // MARK: - Helpers
 
+    // What the run would do with the ISOs picked so far, so the list can name
+    // the base and the section can quote a size before the drive is erased.
+    // make() only sorts and de-duplicates a handful of ISOs.
+    var plan: InstallMediaPlan? {
+        try? InstallMediaPlan.make(from: isoFiles)
+    }
+
     var canStart: Bool {
         selectedDrive != nil && !isoFiles.isEmpty && !isAnalyzing && !processState.isProcessing
     }

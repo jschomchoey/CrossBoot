@@ -20,14 +20,19 @@ struct ContentView: View {
                 Section {
                     ISOListView(
                         isoFiles: viewModel.isoFiles,
+                        baseID: viewModel.plan?.base.id,
                         isAnalyzing: viewModel.isAnalyzing,
                         onAdd: viewModel.selectISOs,
                         onRemove: viewModel.removeISO
                     )
+                    // The list draws its own border, so the section must not
+                    // draw a second one around it.
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
                 } header: {
                     Text("Windows ISOs")
                 } footer: {
-                    Text("Add more than one ISO to put several Windows versions on the same drive.")
+                    Text(sourcesSummary)
                 }
 
                 Section {
@@ -75,6 +80,27 @@ struct ContentView: View {
         .onDrop(of: [.fileURL], isTargeted: dropTarget, perform: handleDrop)
         .overlay(dropHighlight)
         .task { await viewModel.scanDrives() }
+    }
+
+    // What the drive is about to be asked to hold, which the run only reports
+    // after the erase has been confirmed.
+    private var sourcesSummary: String {
+        guard !viewModel.isoFiles.isEmpty else {
+            return "Add more than one ISO to put several Windows versions on the same drive."
+        }
+
+        let isos = viewModel.isoFiles.count == 1 ? "1 ISO" : "\(viewModel.isoFiles.count) ISOs"
+        let editions = viewModel.isoFiles.reduce(0) { $0 + $1.images.count }
+
+        var parts = [isos]
+        if editions > 0 {
+            parts.append(editions == 1 ? "1 edition" : "\(editions) editions")
+        }
+        if let plan = viewModel.plan {
+            parts.append("needs about \(plan.estimatedDriveBytes.formattedSize)")
+        }
+
+        return parts.joined(separator: " · ")
     }
 
     private var destinationHeader: some View {
