@@ -118,9 +118,14 @@ class CrossBootViewModel: ObservableObject {
     // Setup could not handle is refused here rather than after the drive is
     // erased. It also gives the list something to say about each file.
     private func analyze(_ urls: [URL]) async {
+        // A file that was refused has to still be reported once the rest of the
+        // batch has been read: reporting as we go let one good ISO clear the
+        // message from the one dropped beside it.
+        var refusals: [String] = []
+
         for url in urls {
             guard url.pathExtension.lowercased() == "iso" else {
-                inputError = "\(url.lastPathComponent) is not an ISO file"
+                refusals.append("\(url.lastPathComponent) is not an ISO file")
                 continue
             }
 
@@ -130,7 +135,7 @@ class CrossBootViewModel: ObservableObject {
                 let iso = try await isoHandler.analyze(url)
 
                 if let conflict = architectureConflict(with: iso) {
-                    inputError = conflict
+                    refusals.append(conflict)
                     continue
                 }
 
@@ -139,13 +144,16 @@ class CrossBootViewModel: ObservableObject {
                 // the setup menu lists the images in this order.
                 isoFiles.sort { $0.newestBuild > $1.newestBuild }
 
-                inputError = nil
                 processState = ProcessState()
             } catch {
                 Log.process.error("Failed to analyze ISO: \(error.localizedDescription, privacy: .public)")
-                inputError = "Could not read \(url.lastPathComponent): \(error.localizedDescription)"
+                refusals.append("Could not read \(url.lastPathComponent): \(error.localizedDescription)")
             }
         }
+
+        // The status line reserves two lines, so refusals flow into it rather
+        // than each claiming one.
+        inputError = refusals.isEmpty ? nil : refusals.joined(separator: " · ")
     }
 
     private func architectureConflict(with iso: ISOFile) -> String? {

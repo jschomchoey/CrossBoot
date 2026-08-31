@@ -30,7 +30,9 @@ struct ISOFile: Identifiable, Hashable {
     // One line under the file name in the source list.
     var summary: String {
         guard !images.isEmpty else {
-            return installImage == nil ? "No Windows install image found" : "\(images.count) editions"
+            return installImage == nil
+                ? "No Windows install image found"
+                : "Its editions could not be read · \(sizeFormatted)"
         }
 
         var parts: [String] = []
