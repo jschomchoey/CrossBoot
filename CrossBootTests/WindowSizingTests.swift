@@ -3,9 +3,11 @@ import SwiftUI
 import AppKit
 @testable import CrossBoot
 
-// The window is one fixed size. The page has to fit inside it and report the
-// same height in every state it can reach, whatever is showing in the status
-// line, because a scroll-disabled form just clips whatever does not fit.
+// The window is one fixed size. Each mode has to report the same height in every
+// state it can reach, whatever is showing in the status line, because a
+// scroll-disabled form just clips whatever does not fit - and the window itself
+// has to be the height those pages ask for, or it ends in a band of empty
+// window above the action bar.
 @MainActor
 final class WindowSizingTests: XCTestCase {
 
@@ -53,38 +55,157 @@ final class WindowSizingTests: XCTestCase {
         return model
     }
 
-    func testThePageIsTheSameHeightInEveryState() throws {
-        let idle = fittingHeight(of: try viewModel())
+    func testTheWindowsPageIsTheSameHeightInEveryState() throws {
+        let idle = try viewModel()
 
-        XCTAssertGreaterThan(idle, 0, "the page reported no height at all")
+        try assertOneHeight(
+            named: "Windows mode",
+            across: [
+                ("nothing chosen", idle),
+                ("no drive attached", try viewModel(drive: false)),
+                ("one ISO chosen", try viewModel(isoCount: 1)),
+                // The list scrolls rather than growing, so a fourth ISO must not
+                // push the window taller than a first one did.
+                ("three ISOs chosen", try viewModel(isoCount: 3)),
+                ("six ISOs chosen", try viewModel(isoCount: 6)),
+                ("analyzing", try analyzingViewModel()),
+                ("merging", try viewModel(
+                    isoCount: 2,
+                    state: ProcessState(stage: .merging, progress: 30, currentFile: "Windows 11 Pro (Build 26100)")
+                )),
+                ("copying", try viewModel(isoCount: 1, state: ProcessState(stage: .copying, progress: 42, currentFile: "install.swm"))),
+                ("stopping", try viewModel(isoCount: 1, state: ProcessState(stage: .aborting, progress: 42))),
+                ("done", try viewModel(isoCount: 1, state: ProcessState(stage: .done, progress: 100))),
+                ("aborted", try viewModel(isoCount: 1, state: ProcessState(stage: .aborted))),
+                ("failed", try viewModel(isoCount: 1, state: .failed("The drive was disconnected."))),
+                ("bad drop", try viewModel(inputError: "notes.txt is not an ISO file"))
+            ]
+        )
+    }
+
+    func testTheMacOSPageIsTheSameHeightInEveryState() throws {
+        try assertOneHeight(
+            named: "macOS mode",
+            across: [
+                ("nothing listed", try macOSViewModel()),
+                ("versions listed", try macOSViewModel(versions: 3)),
+                ("many versions listed", try macOSViewModel(versions: 8)),
+                ("loading", try macOSViewModel(loading: true)),
+                ("reloading with versions listed", try macOSViewModel(versions: 3, loading: true)),
+                ("showing unusable versions", try macOSViewModel(versions: 3, showsUnusable: true)),
+                ("a local installer selected", try macOSViewModel(versions: 3, local: true)),
+                ("downloading", try macOSViewModel(
+                    versions: 3,
+                    state: ProcessState(stage: .downloading, progress: 20, currentFile: "macOS Tahoe 26.6.2")
+                )),
+                ("waiting on the password", try macOSViewModel(
+                    versions: 3,
+                    state: ProcessState(stage: .authorizing, progress: 55)
+                )),
+                ("writing", try macOSViewModel(
+                    versions: 3,
+                    state: ProcessState(stage: .writingInstaller, progress: 80)
+                )),
+                ("failed", try macOSViewModel(versions: 3, state: .failed("The drive was disconnected.")))
+            ]
+        )
+    }
+
+    // A window taller than both pages is what leaves the empty band; a window
+    // shorter than either clips it.
+    func testTheWindowIsTheHeightOfTheTallerPage() throws {
+        let windows = fittingHeight(of: try viewModel())
+        let macOS = fittingHeight(of: try macOSViewModel(versions: 3))
+
+        XCTAssertEqual(
+            max(windows, macOS), WindowLayout.height, accuracy: 1,
+            "the pages want \(windows)pt and \(macOS)pt but the window is fixed at \(WindowLayout.height)pt"
+        )
+    }
+
+    // The window is shared, so a page may ask for less than it - the two modes
+    // hold different controls - but not for much less, and never for more.
+    @discardableResult
+    private func assertOneHeight(
+        named mode: String,
+        across states: [(String, CrossBootViewModel)],
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws -> CGFloat {
+        let first = try XCTUnwrap(states.first, file: file, line: line)
+        let height = fittingHeight(of: first.1)
+
+        XCTAssertGreaterThan(height, 0, "\(mode) reported no height at all", file: file, line: line)
         XCTAssertLessThanOrEqual(
-            idle, WindowLayout.height,
-            "the page wants \(idle)pt but the window is fixed at \(WindowLayout.height)pt"
+            height, WindowLayout.height,
+            "\(mode) wants \(height)pt but the window is fixed at \(WindowLayout.height)pt",
+            file: file, line: line
+        )
+        XCTAssertGreaterThan(
+            height, WindowLayout.height - Self.largestEmptyBand,
+            "\(mode) wants \(height)pt, which leaves an empty band under a \(WindowLayout.height)pt window",
+            file: file, line: line
         )
 
-        let others: [(String, CrossBootViewModel)] = [
-            ("no drive attached", try viewModel(drive: false)),
-            ("one ISO chosen", try viewModel(isoCount: 1)),
-            // The list scrolls rather than growing, so a fourth ISO must not
-            // push the window taller than a first one did.
-            ("three ISOs chosen", try viewModel(isoCount: 3)),
-            ("six ISOs chosen", try viewModel(isoCount: 6)),
-            ("analyzing", try analyzingViewModel()),
-            ("merging", try viewModel(
-                isoCount: 2,
-                state: ProcessState(stage: .merging, progress: 30, currentFile: "Windows 11 Pro (Build 26100)")
-            )),
-            ("copying", try viewModel(isoCount: 1, state: ProcessState(stage: .copying, progress: 42, currentFile: "install.swm"))),
-            ("stopping", try viewModel(isoCount: 1, state: ProcessState(stage: .aborting, progress: 42))),
-            ("done", try viewModel(isoCount: 1, state: ProcessState(stage: .done, progress: 100))),
-            ("aborted", try viewModel(isoCount: 1, state: ProcessState(stage: .aborted))),
-            ("failed", try viewModel(isoCount: 1, state: .failed("The drive was disconnected."))),
-            ("bad drop", try viewModel(inputError: "notes.txt is not an ISO file"))
-        ]
-
-        for (name, model) in others {
-            XCTAssertEqual(fittingHeight(of: model), idle, accuracy: 0.5, "height changed in state: \(name)")
+        for (name, model) in states.dropFirst() {
+            XCTAssertEqual(
+                fittingHeight(of: model), height, accuracy: 0.5,
+                "\(mode) changed height in state: \(name)",
+                file: file, line: line
+            )
         }
+
+        return height
+    }
+
+    // What the shorter of the two pages may leave unused before the gap above
+    // the action bar reads as a layout mistake rather than as spacing.
+    private static let largestEmptyBand: CGFloat = 40
+
+    private func macOSViewModel(
+        versions: Int = 0,
+        loading: Bool = false,
+        showsUnusable: Bool = false,
+        local: Bool = false,
+        state: ProcessState = ProcessState()
+    ) throws -> CrossBootViewModel {
+        let model = try viewModel()
+        model.mediaKind = .macOS
+        model.isLoadingVersions = loading
+        model.showsUnusableVersions = showsUnusable
+
+        // An installer the user pointed at is the one entry the section menu
+        // offers to remove, and it summarizes without a download.
+        if local {
+            model.localInstallers = [
+                MacOSInstaller(
+                    name: "macOS Tahoe",
+                    version: MacOSVersion([26, 6, 2]),
+                    build: "25G83",
+                    sizeBytes: 18_384_624_402,
+                    minimumHostVersion: nil,
+                    origin: .application(URL(fileURLWithPath: "/Applications/Install macOS Tahoe.app"))
+                )
+            ]
+        }
+
+        model.remoteInstallers = (0..<versions).map { index in
+            MacOSInstaller(
+                name: "macOS Release \(index)",
+                version: MacOSVersion([26 - index, 6, 2]),
+                build: "25G8\(index)",
+                sizeBytes: 18_384_624_402,
+                minimumHostVersion: nil,
+                origin: .catalog(
+                    productID: "140-9358\(index)",
+                    packageURL: URL(fileURLWithPath: "/tmp/InstallAssistant.pkg")
+                )
+            )
+        }
+        model.refreshVersionList()
+
+        model.processState = state
+        return model
     }
 
     private func analyzingViewModel() throws -> CrossBootViewModel {

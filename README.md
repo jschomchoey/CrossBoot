@@ -1,12 +1,13 @@
 # CrossBoot
 
-A simple tool for creating Windows bootable USB drives on macOS.
+A simple tool for creating Windows and macOS bootable USB drives on macOS.
 
 ![CrossBoot Screenshot](assets/screenshot.png)
 
 ## Features
 
 - Clean, user-friendly interface
+- Create macOS install media for any release Apple still publishes, older or newer than this Mac
 - Combine several Windows versions on one drive, still bootable with Secure Boot on
 - Auto-split WIM files for FAT32 compatibility (supports >4GB files)
 - Supports both Legacy BIOS and UEFI boot modes
@@ -21,8 +22,8 @@ A simple tool for creating Windows bootable USB drives on macOS.
 
 - macOS 13 or later
 - Mac Apple Silicon or Intel
-- Windows ISO file
-- USB drive (8GB or larger recommended)
+- A Windows ISO file, or an internet connection for macOS media
+- USB drive - 8 GB or larger for Windows, 32 GB or larger for macOS
 
 ## Installation
 
@@ -31,6 +32,11 @@ Download the latest release from the releases page and install the application.
 **Note:** This app is not signed with an Apple Developer certificate. When running it for the first time, macOS Gatekeeper will block it. You'll need to allow the app in **System Settings > Privacy & Security** before you can run it.
 
 ## Usage
+
+Pick **Windows** or **macOS** in the window's toolbar. The drive picker, the progress bar and the Create button
+are the same for both.
+
+### Windows
 
 1. Insert your USB drive
 2. Add one or more Windows ISO files (click "Add ISO…" or drag-and-drop)
@@ -66,6 +72,49 @@ which is solid-compressed and has to be rewritten in a format that can be split 
 the space up front, and the drive is not erased until the rewriting and splitting are finished, so a run that
 cannot complete leaves it as it was.
 
+## macOS installers
+
+Switch to **macOS** and CrossBoot lists the releases Apple still publishes. Pick one, pick a drive, and it
+downloads the installer and hands it to Apple's own `createinstallmedia`.
+
+### Any version, not just this Mac's
+
+`softwareupdate --list-full-installers` answers with what Apple serves *your* machine, so it can never offer a
+release newer than the one you are entitled to. CrossBoot reads Apple's software update catalog directly
+instead, which is not filtered by hardware, so both older and newer releases are listed. Three sources feed the
+list:
+
+- **Apple's catalog** - every `InstallAssistant.pkg` Apple publishes, roughly 12 GB to 18 GB each.
+- **Software Update** - what `softwareupdate` offers this Mac, used only for anything the catalog did not carry.
+- **A local installer** - an `Install macOS X.app` or an `InstallAssistant.pkg` you already have, dropped on the
+  window or chosen from the menu beside **macOS Version**.
+
+The version menu marks the releases this Mac cannot build, and picking one says why. Two limits are enforced
+before anything is erased:
+
+- **A release that needs a newer macOS than you are running** cannot be expanded here, and the catalog says so
+  per release.
+- **A release older than Big Sur cannot be built on Apple Silicon.** The media would write successfully and then
+  boot nothing.
+
+Versions this Mac cannot build are hidden until you ask for them under Advanced Options.
+
+### What it does to your Mac
+
+Writing macOS media needs `createinstallmedia`, which needs root, so CrossBoot asks for your administrator
+password once per run. Everything privileged happens in a single step, and nothing you chose is ever spliced
+into a command - paths are passed as arguments and quoted by AppleScript itself.
+
+The drive is checked twice: once before the password prompt, and again as root immediately before the erase,
+because preparing an installer can take an hour and a drive can be swapped in that time. It has to still be
+external, still removable, and still exactly the size it was.
+
+Preparing the installer leaves `Install macOS X.app` in `/Applications`. CrossBoot tells you it is there, and
+Advanced Options can delete it once the drive is written.
+
+The download is checked against the byte count Apple publishes and discarded if it disagrees, so a truncated
+transfer fails before the drive is touched rather than after.
+
 ## Development
 
 ### Tech Stack
@@ -73,6 +122,7 @@ cannot complete leaves it as it was.
 - Swift - Programming language
 - SwiftUI - UI framework
 - wimlib - WIM file manipulation
+- createinstallmedia - Apple's own tool, used unchanged for macOS media
 
 ## Acknowledgments
 

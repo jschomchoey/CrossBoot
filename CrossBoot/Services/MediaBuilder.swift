@@ -277,7 +277,7 @@ final class MediaBuilder {
 
     // Merging rewrites install.wim on the user's own disk before anything
     // reaches the drive, and that scratch copy is the run's real space cost.
-    private static func ensureScratchSpace(_ required: Int64) throws {
+    static func ensureScratchSpace(_ required: Int64) throws {
         guard required > 0 else { return }
 
         let temporary = FileManager.default.temporaryDirectory

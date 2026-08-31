@@ -9,6 +9,12 @@ enum ProcessStage: Equatable {
     case rebuilding
     case splitting
     case copying
+    // macOS runs: fetching the installer, waiting on the authorization prompt,
+    // unpacking it, and letting createinstallmedia write the drive.
+    case downloading
+    case authorizing
+    case preparingInstaller
+    case writingInstaller
     case aborting
     case done
     case aborted
@@ -24,6 +30,10 @@ enum ProcessStage: Equatable {
         case .rebuilding: return "Rewriting the install image"
         case .splitting: return "Splitting install.wim"
         case .copying: return "Copying files"
+        case .downloading: return "Downloading macOS"
+        case .authorizing: return "Waiting for your password"
+        case .preparingInstaller: return "Preparing the macOS installer"
+        case .writingInstaller: return "Writing the macOS installer"
         case .aborting: return "Stopping"
         case .done: return "Done"
         case .aborted: return "Stopped"
@@ -47,8 +57,20 @@ struct ProcessState {
         switch stage {
         case .idle, .done, .aborted, .error:
             return false
-        case .formatting, .analyzing, .merging, .rebuilding, .splitting, .copying, .aborting:
+        case .formatting, .analyzing, .merging, .rebuilding, .splitting, .copying,
+             .downloading, .authorizing, .preparingInstaller, .writingInstaller, .aborting:
             return true
+        }
+    }
+
+    // Once createinstallmedia is running the drive is being written by a root
+    // process this app cannot signal mid-step, so stopping has to wait for it.
+    var isCancellable: Bool {
+        switch stage {
+        case .authorizing, .aborting:
+            return false
+        default:
+            return isProcessing
         }
     }
 }

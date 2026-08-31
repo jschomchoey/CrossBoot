@@ -33,7 +33,24 @@
 		033 /* ISOListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 133 /* ISOListView.swift */; };
 		034 /* MediaPlanTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 134 /* MediaPlanTests.swift */; };
 		035 /* WimXMLParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 135 /* WimXMLParserTests.swift */; };
+		053 /* MacOSCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 153 /* MacOSCatalogTests.swift */; };
+		054 /* MacOSMediaPlanTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 154 /* MacOSMediaPlanTests.swift */; };
+		055 /* PrivilegedStepTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 155 /* PrivilegedStepTests.swift */; };
+		056 /* CreateInstallMediaOutputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 156 /* CreateInstallMediaOutputTests.swift */; };
 		036 /* MediaBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 136 /* MediaBuilder.swift */; };
+		040 /* MediaKind.swift in Sources */ = {isa = PBXBuildFile; fileRef = 140 /* MediaKind.swift */; };
+		041 /* MacOSVersion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 141 /* MacOSVersion.swift */; };
+		042 /* MacOSInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = 142 /* MacOSInstaller.swift */; };
+		043 /* MacOSMediaPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = 143 /* MacOSMediaPlan.swift */; };
+		044 /* PrivilegedRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 144 /* PrivilegedRunner.swift */; };
+		045 /* SoftwareCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 145 /* SoftwareCatalog.swift */; };
+		046 /* DistributionParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 146 /* DistributionParser.swift */; };
+		047 /* InstallerSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = 147 /* InstallerSource.swift */; };
+		048 /* InstallerDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 148 /* InstallerDownloader.swift */; };
+		049 /* CreateInstallMediaOutput.swift in Sources */ = {isa = PBXBuildFile; fileRef = 149 /* CreateInstallMediaOutput.swift */; };
+		050 /* MacOSMediaBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 150 /* MacOSMediaBuilder.swift */; };
+		051 /* MacOSVersionPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 151 /* MacOSVersionPicker.swift */; };
+		052 /* CrossBootViewModel+MacOS.swift in Sources */ = {isa = PBXBuildFile; fileRef = 152 /* CrossBootViewModel+MacOS.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -66,7 +83,24 @@
 		133 /* ISOListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ISOListView.swift; sourceTree = "<group>"; };
 		134 /* MediaPlanTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaPlanTests.swift; sourceTree = "<group>"; };
 		135 /* WimXMLParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WimXMLParserTests.swift; sourceTree = "<group>"; };
+		153 /* MacOSCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacOSCatalogTests.swift; sourceTree = "<group>"; };
+		154 /* MacOSMediaPlanTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacOSMediaPlanTests.swift; sourceTree = "<group>"; };
+		155 /* PrivilegedStepTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivilegedStepTests.swift; sourceTree = "<group>"; };
+		156 /* CreateInstallMediaOutputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateInstallMediaOutputTests.swift; sourceTree = "<group>"; };
 		136 /* MediaBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaBuilder.swift; sourceTree = "<group>"; };
+		140 /* MediaKind.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaKind.swift; sourceTree = "<group>"; };
+		141 /* MacOSVersion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacOSVersion.swift; sourceTree = "<group>"; };
+		142 /* MacOSInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacOSInstaller.swift; sourceTree = "<group>"; };
+		143 /* MacOSMediaPlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacOSMediaPlan.swift; sourceTree = "<group>"; };
+		144 /* PrivilegedRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrivilegedRunner.swift; sourceTree = "<group>"; };
+		145 /* SoftwareCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoftwareCatalog.swift; sourceTree = "<group>"; };
+		146 /* DistributionParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DistributionParser.swift; sourceTree = "<group>"; };
+		147 /* InstallerSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstallerSource.swift; sourceTree = "<group>"; };
+		148 /* InstallerDownloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstallerDownloader.swift; sourceTree = "<group>"; };
+		149 /* CreateInstallMediaOutput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateInstallMediaOutput.swift; sourceTree = "<group>"; };
+		150 /* MacOSMediaBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacOSMediaBuilder.swift; sourceTree = "<group>"; };
+		151 /* MacOSVersionPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacOSVersionPicker.swift; sourceTree = "<group>"; };
+		152 /* CrossBootViewModel+MacOS.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CrossBootViewModel+MacOS.swift"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -129,6 +163,10 @@
 				106 /* ProcessState.swift */,
 				131 /* InstallMediaPlan.swift */,
 				130 /* WindowsImage.swift */,
+				140 /* MediaKind.swift */,
+				141 /* MacOSVersion.swift */,
+				142 /* MacOSInstaller.swift */,
+				143 /* MacOSMediaPlan.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -144,6 +182,13 @@
 				110 /* ShellHelper.swift */,
 				136 /* MediaBuilder.swift */,
 				132 /* WimXMLParser.swift */,
+				144 /* PrivilegedRunner.swift */,
+				145 /* SoftwareCatalog.swift */,
+				146 /* DistributionParser.swift */,
+				147 /* InstallerSource.swift */,
+				148 /* InstallerDownloader.swift */,
+				149 /* CreateInstallMediaOutput.swift */,
+				150 /* MacOSMediaBuilder.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -152,6 +197,7 @@
 			isa = PBXGroup;
 			children = (
 				111 /* CrossBootViewModel.swift */,
+				152 /* CrossBootViewModel+MacOS.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -162,6 +208,7 @@
 				102 /* ContentView.swift */,
 				C0E5B9112F2E5B4400869CAF /* DriveSelectorView.swift */,
 				133 /* ISOListView.swift */,
+				151 /* MacOSVersionPicker.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -183,6 +230,10 @@
 				123 /* WindowSizingTests.swift */,
 				134 /* MediaPlanTests.swift */,
 				135 /* WimXMLParserTests.swift */,
+				153 /* MacOSCatalogTests.swift */,
+				154 /* MacOSMediaPlanTests.swift */,
+				155 /* PrivilegedStepTests.swift */,
+				156 /* CreateInstallMediaOutputTests.swift */,
 			);
 			path = CrossBootTests;
 			sourceTree = "<group>";
@@ -315,6 +366,19 @@
 				032 /* WimXMLParser.swift in Sources */,
 				033 /* ISOListView.swift in Sources */,
 				036 /* MediaBuilder.swift in Sources */,
+				040 /* MediaKind.swift in Sources */,
+				041 /* MacOSVersion.swift in Sources */,
+				042 /* MacOSInstaller.swift in Sources */,
+				043 /* MacOSMediaPlan.swift in Sources */,
+				044 /* PrivilegedRunner.swift in Sources */,
+				045 /* SoftwareCatalog.swift in Sources */,
+				046 /* DistributionParser.swift in Sources */,
+				047 /* InstallerSource.swift in Sources */,
+				048 /* InstallerDownloader.swift in Sources */,
+				049 /* CreateInstallMediaOutput.swift in Sources */,
+				050 /* MacOSMediaBuilder.swift in Sources */,
+				051 /* MacOSVersionPicker.swift in Sources */,
+				052 /* CrossBootViewModel+MacOS.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -328,6 +392,10 @@
 				022 /* WindowSizingTests.swift in Sources */,
 				034 /* MediaPlanTests.swift in Sources */,
 				035 /* WimXMLParserTests.swift in Sources */,
+				053 /* MacOSCatalogTests.swift in Sources */,
+				054 /* MacOSMediaPlanTests.swift in Sources */,
+				055 /* PrivilegedStepTests.swift in Sources */,
+				056 /* CreateInstallMediaOutputTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

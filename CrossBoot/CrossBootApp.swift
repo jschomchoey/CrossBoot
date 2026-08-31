@@ -1,10 +1,12 @@
 import SwiftUI
 
-// The window is one fixed size. The page has a single layout whose height does
-// not vary with what is on screen, so there is nothing to resize it to.
+// The window is one fixed size. Neither mode's page changes height with what is
+// on screen, so there is nothing to resize it to - this is the taller of the two
+// pages, measured, and WindowSizingTests fails if either page outgrows it or
+// falls far enough behind it to leave a band of empty window.
 enum WindowLayout {
     static let width: CGFloat = 460
-    static let height: CGFloat = 738
+    static let height: CGFloat = 750
 }
 
 @main

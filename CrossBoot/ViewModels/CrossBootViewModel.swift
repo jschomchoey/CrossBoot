@@ -5,9 +5,22 @@ import UniformTypeIdentifiers
 @MainActor
 class CrossBootViewModel: ObservableObject {
     // MARK: - Published Properties
+    @Published var mediaKind: MediaKind = .windows
     @Published var drives: [Drive] = []
     @Published var selectedDrive: Drive?
     @Published var isoFiles: [ISOFile] = []
+
+    // macOS mode. The list merges what Apple's catalog publishes, what
+    // softwareupdate offers this Mac, and anything the user pointed at.
+    @Published var macOSVersions: [MacOSInstaller] = []
+    @Published var selectedVersion: MacOSInstaller?
+    @Published var isLoadingVersions = false
+    // The catalog carries releases this Mac cannot build; they are hidden until
+    // asked for so the list is not mostly entries that would be refused.
+    @Published var showsUnusableVersions = false
+    // Preparing an installer leaves 12-18 GB in /Applications. Keeping it is the
+    // default because deleting what the user may want back is the worse mistake.
+    @Published var removesPreparedInstaller = false
     @Published var bypassRequirements = false
     @Published var bypassOnlineAccount = false
     @Published var processState = ProcessState()
@@ -20,12 +33,21 @@ class CrossBootViewModel: ObservableObject {
 
     // MARK: - Services
     private let diskManager = DiskManager.shared
-    private let isoHandler = ISOHandler.shared
+    let isoHandler = ISOHandler.shared
     private let wimLibService = WimLibService.shared
-    private let powerAssertion = PowerAssertionManager.shared
+    let powerAssertion = PowerAssertionManager.shared
 
     // MARK: - Task Management
-    private var currentTask: Task<Void, Never>?
+    var currentTask: Task<Void, Never>?
+
+    // The catalog is fetched once per launch; it is a 7 MB list plus one small
+    // file per product, and it does not change while the app is open.
+    var loadedVersions = false
+    // Installers the user pointed at, kept across a refresh of the fetched list.
+    var localInstallers: [MacOSInstaller] = []
+    // What the catalog and softwareupdate last reported, kept so adding a local
+    // installer does not mean fetching either of them again.
+    var remoteInstallers: [MacOSInstaller] = []
 
     // Analysis runs one batch at a time, in the order the batches arrived.
     private var analysisTask: Task<Void, Never>?
@@ -170,9 +192,22 @@ class CrossBootViewModel: ObservableObject {
 
     func createBootableUSB() {
         currentTask = Task {
-            await performCreateBootableUSB()
+            switch mediaKind {
+            case .windows: await performWindowsRun()
+            case .macOS: await performMacOSRun()
+            }
             currentTask = nil
         }
+    }
+
+    // Each mode reports its own refusals, and the one left over from the other
+    // mode is about to describe sources this mode does not have.
+    func select(_ kind: MediaKind) {
+        guard !processState.isProcessing, kind != mediaKind else { return }
+
+        mediaKind = kind
+        inputError = nil
+        processState = ProcessState()
     }
 
     func abortProcess() {
@@ -189,7 +224,7 @@ class CrossBootViewModel: ObservableObject {
         }
     }
 
-    private func performCreateBootableUSB() async {
+    private func performWindowsRun() async {
         guard let drive = selectedDrive else {
             processState = .failed("No USB drive selected")
             return
@@ -242,7 +277,7 @@ class CrossBootViewModel: ObservableObject {
 
     // Every exit path from a run releases what the run acquired; `defer` cannot
     // await, and deferring a detached Task made the ordering unpredictable.
-    private func releaseResources() async {
+    func releaseResources() async {
         await isoHandler.cleanup()
         await powerAssertion.releaseAssertion()
     }
@@ -257,7 +292,15 @@ class CrossBootViewModel: ObservableObject {
     }
 
     var canStart: Bool {
-        selectedDrive != nil && !isoFiles.isEmpty && !isAnalyzing && !processState.isProcessing
+        guard selectedDrive != nil, !processState.isProcessing else { return false }
+
+        switch mediaKind {
+        case .windows: return !isoFiles.isEmpty && !isAnalyzing
+        // A version this Mac cannot build is still pickable, so the plan - not
+        // the selection - is what says a run can start. Otherwise the button
+        // asks to erase the drive and then refuses.
+        case .macOS: return macOSPlan != nil && !isLoadingVersions
+        }
     }
 
     private static func successMessage(for plan: InstallMediaPlan) -> String {
@@ -269,7 +312,7 @@ class CrossBootViewModel: ObservableObject {
         return "The drive is ready with \(count) Windows editions. You can eject it and boot from it."
     }
 
-    private func showAlert(title: String, message: String, style: NSAlert.Style) {
+    func showAlert(title: String, message: String, style: NSAlert.Style) {
         let alert = NSAlert()
         alert.messageText = title
         alert.informativeText = message

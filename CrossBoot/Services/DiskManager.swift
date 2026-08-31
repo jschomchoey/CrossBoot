@@ -103,10 +103,20 @@ actor DiskManager {
 
     // Format drive to FAT32 with MBR
     func formatDrive(_ drive: Drive) async throws {
-        // Disk identifiers are reused when devices are replugged, so a selection
-        // made moments ago can point at a different disk - possibly an internal
-        // one - by the time we erase. Re-read the disk and require it to still be
-        // the exact removable drive the user chose.
+        try await verifyStillPresent(drive)
+
+        try await ShellHelper.run(Self.diskutil, ["eraseDisk", "MS-DOS", "WINDOWS", "MBR", drive.device])
+    }
+
+    // Disk identifiers are reused when devices are replugged, so a selection
+    // made moments ago can point at a different disk - possibly an internal one -
+    // by the time we erase. Re-read the disk and require it to still be the exact
+    // removable drive the user chose.
+    //
+    // A macOS run erases from a privileged step rather than from here, so this
+    // has to be callable on its own. That step repeats the same check as root
+    // immediately before it erases, because it can be minutes further on.
+    func verifyStillPresent(_ drive: Drive) async throws {
         guard let current = await Self.removableDrive(drive.id) else {
             throw DiskError.driveUnavailable(drive.name)
         }
@@ -114,8 +124,6 @@ actor DiskManager {
         guard current == drive else {
             throw DiskError.driveChanged
         }
-
-        try await ShellHelper.run(Self.diskutil, ["eraseDisk", "MS-DOS", "WINDOWS", "MBR", drive.device])
     }
 
     // Newly formatted volumes take a moment to appear; back off between tries.

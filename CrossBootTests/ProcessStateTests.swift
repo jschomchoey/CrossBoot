@@ -4,7 +4,10 @@ import XCTest
 final class ProcessStateTests: XCTestCase {
 
     func testOnlyWorkingStagesCountAsProcessing() {
-        let working: [ProcessStage] = [.formatting, .analyzing, .splitting, .copying, .aborting]
+        let working: [ProcessStage] = [
+            .formatting, .analyzing, .merging, .rebuilding, .splitting, .copying,
+            .downloading, .authorizing, .preparingInstaller, .writingInstaller, .aborting
+        ]
         for stage in working {
             XCTAssertTrue(ProcessState(stage: stage).isProcessing, "\(stage) should be processing")
         }
@@ -13,6 +16,35 @@ final class ProcessStateTests: XCTestCase {
         for stage in finished {
             XCTAssertFalse(ProcessState(stage: stage).isProcessing, "\(stage) should not be processing")
         }
+    }
+
+    // Every stage the user can see has to say something; an empty status line
+    // reads as the app having stopped.
+    func testEveryStageDescribesItself() {
+        let stages: [ProcessStage] = [
+            .idle, .formatting, .analyzing, .merging, .rebuilding, .splitting, .copying,
+            .downloading, .authorizing, .preparingInstaller, .writingInstaller,
+            .aborting, .done, .aborted
+        ]
+
+        for stage in stages {
+            XCTAssertFalse(stage.description.isEmpty, "\(stage) has no description")
+        }
+    }
+
+    // Stopping cannot interrupt an authorization prompt: nothing is running yet
+    // that could be told to stop, and the button would do nothing.
+    func testTheAuthorizationPromptCannotBeStopped() {
+        XCTAssertFalse(ProcessState(stage: .authorizing).isCancellable)
+        XCTAssertFalse(ProcessState(stage: .aborting).isCancellable)
+
+        XCTAssertTrue(ProcessState(stage: .downloading).isCancellable)
+        XCTAssertTrue(ProcessState(stage: .writingInstaller).isCancellable)
+        XCTAssertTrue(ProcessState(stage: .copying).isCancellable)
+
+        // Nothing is running, so there is nothing to stop.
+        XCTAssertFalse(ProcessState(stage: .idle).isCancellable)
+        XCTAssertFalse(ProcessState(stage: .done).isCancellable)
     }
 
     // A stale progress value next to an error message reads as partial success.

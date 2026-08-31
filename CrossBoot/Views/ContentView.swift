@@ -1,9 +1,10 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// The whole app on one page. Everything stays put while a run is in flight:
-/// the form locks, the button turns into Stop, and progress reports at the
-/// bottom, so the window is laid out once and never resized.
+/// The whole app on one page: the mode sits in the toolbar, the setup form
+/// under it, and the run reports at the bottom. Everything stays put while a run
+/// is in flight - the form locks and the button turns into Stop - and both modes
+/// lay out to the one height the window is fixed at.
 struct ContentView: View {
     @StateObject private var viewModel: CrossBootViewModel
 
@@ -18,21 +19,14 @@ struct ContentView: View {
         VStack(spacing: 0) {
             Form {
                 Section {
-                    ISOListView(
-                        isoFiles: viewModel.isoFiles,
-                        baseID: viewModel.plan?.base.id,
-                        isAnalyzing: viewModel.isAnalyzing,
-                        onAdd: viewModel.selectISOs,
-                        onRemove: viewModel.removeISO
-                    )
-                    // The list draws its own border, so the section must not
-                    // draw a second one around it.
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
+                    sourceRows
                 } header: {
-                    Text("Windows ISOs")
+                    sourceHeader
                 } footer: {
-                    Text(sourcesSummary)
+                    // Whatever this reports, it reports in the same space: the
+                    // page cannot change height between one run and the next.
+                    sourceFooter
+                        .lineLimit(2, reservesSpace: true)
                 }
 
                 Section {
@@ -53,14 +47,26 @@ struct ContentView: View {
                 }
 
                 Section("Advanced Options") {
-                    Toggle(isOn: $viewModel.bypassRequirements) {
-                        Text("Bypass Windows 11 Requirements")
-                        Text("Skips the TPM 2.0, Secure Boot and RAM checks during setup.")
-                    }
+                    if viewModel.mediaKind == .windows {
+                        Toggle(isOn: $viewModel.bypassRequirements) {
+                            Text("Bypass Windows 11 Requirements")
+                            Text("Skips the TPM 2.0, Secure Boot and RAM checks during setup.")
+                        }
 
-                    Toggle(isOn: $viewModel.bypassOnlineAccount) {
-                        Text("Bypass Online Account")
-                        Text("Lets setup finish with a local account instead of a Microsoft account.")
+                        Toggle(isOn: $viewModel.bypassOnlineAccount) {
+                            Text("Bypass Online Account")
+                            Text("Lets setup finish with a local account instead of a Microsoft account.")
+                        }
+                    } else {
+                        Toggle(isOn: $viewModel.showsUnusableVersions) {
+                            Text("Show Versions This Mac Cannot Build")
+                            Text("Lists releases that need a newer macOS, or predate Apple Silicon.")
+                        }
+
+                        Toggle(isOn: $viewModel.removesPreparedInstaller) {
+                            Text("Remove the Installer Afterwards")
+                            Text("Deletes the installer this run leaves in /Applications.")
+                        }
                     }
                 }
             }
@@ -79,12 +85,125 @@ struct ContentView: View {
         // Dropping anywhere in the window beats aiming at a small zone.
         .onDrop(of: [.fileURL], isTargeted: dropTarget, perform: handleDrop)
         .overlay(dropHighlight)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                modePicker
+            }
+        }
         .task { await viewModel.scanDrives() }
+        .task(id: viewModel.mediaKind) {
+            guard viewModel.mediaKind == .macOS else { return }
+            await viewModel.loadMacOSVersions()
+        }
+    }
+
+    // Which kind of media a run produces is the one choice the whole page hangs
+    // off, so it sits in the toolbar rather than taking a row of the form.
+    private var modePicker: some View {
+        Picker("Media", selection: mediaKind) {
+            ForEach(MediaKind.allCases) { kind in
+                Text(kind.name).tag(kind)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .fixedSize()
+        .disabled(viewModel.processState.isProcessing)
+    }
+
+    private var mediaKind: Binding<MediaKind> {
+        Binding(
+            get: { viewModel.mediaKind },
+            set: { viewModel.select($0) }
+        )
+    }
+
+    @ViewBuilder
+    private var sourceRows: some View {
+        switch viewModel.mediaKind {
+        case .windows:
+            ISOListView(
+                isoFiles: viewModel.isoFiles,
+                baseID: viewModel.plan?.base.id,
+                isAnalyzing: viewModel.isAnalyzing,
+                onAdd: viewModel.selectISOs,
+                onRemove: viewModel.removeISO
+            )
+            // The list draws its own border, so the row must not draw a second
+            // one around it.
+            .listRowInsets(EdgeInsets())
+            .listRowBackground(Color.clear)
+        case .macOS:
+            MacOSVersionPicker(
+                versions: visibleVersions,
+                selection: $viewModel.selectedVersion,
+                isLoading: viewModel.isLoadingVersions
+            )
+        }
+    }
+
+    private var sourceHeader: some View {
+        HStack {
+            Text(viewModel.mediaKind == .windows ? "Windows ISOs" : "macOS Version")
+
+            Spacer()
+
+            // The ISO list carries its own add and remove buttons; the version
+            // menu has nowhere to put them, so they live here.
+            if viewModel.mediaKind == .macOS {
+                macOSSourceMenu
+            }
+        }
+    }
+
+    private var macOSSourceMenu: some View {
+        Menu {
+            Button("Choose an Installer…", action: viewModel.selectInstallers)
+
+            // Only what the user added can be taken back out; the rest is what
+            // Apple publishes.
+            if let selected = viewModel.selectedVersion, viewModel.isRemovable(selected) {
+                Button("Remove \(selected.title) from the List") {
+                    viewModel.removeInstaller(selected)
+                }
+            }
+
+            Divider()
+
+            Button("Reload from Apple") {
+                Task { await viewModel.loadMacOSVersions(refresh: true) }
+            }
+            .disabled(viewModel.isLoadingVersions)
+        } label: {
+            Image(systemName: "ellipsis.circle")
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("Add, remove or reload macOS versions")
+    }
+
+    // A version already picked stays listed even once the filter is put back on,
+    // so the selection cannot disappear out from under the run button.
+    private var visibleVersions: [MacOSInstaller] {
+        guard !viewModel.showsUnusableVersions else { return viewModel.macOSVersions }
+
+        return viewModel.macOSVersions.filter {
+            MacOSMediaPlan.refusal(for: $0) == nil || $0.id == viewModel.selectedVersion?.id
+        }
+    }
+
+    @ViewBuilder
+    private var sourceFooter: some View {
+        switch viewModel.mediaKind {
+        case .windows: Text(windowsSummary)
+        case .macOS: macOSFooter
+        }
     }
 
     // What the drive is about to be asked to hold, which the run only reports
     // after the erase has been confirmed.
-    private var sourcesSummary: String {
+    private var windowsSummary: String {
         guard !viewModel.isoFiles.isEmpty else {
             return "Add more than one ISO to put several Windows versions on the same drive."
         }
@@ -101,6 +220,36 @@ struct ContentView: View {
         }
 
         return parts.joined(separator: " · ")
+    }
+
+    @ViewBuilder
+    private var macOSFooter: some View {
+        // A version this Mac cannot build is picked from the menu like any
+        // other, so this is where it says why the run is not offered.
+        if let selected = viewModel.selectedVersion,
+           let refusal = MacOSMediaPlan.refusal(for: selected) {
+            Label(refusal.errorDescription ?? "", systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(.orange)
+        } else if viewModel.isLoadingVersions {
+            Text("Asking Apple which versions are available…")
+        } else if let plan = viewModel.macOSPlan {
+            Text(macOSSummary(for: plan))
+        } else {
+            Text("Apple's catalog is not filtered by this Mac, so it lists older and newer releases alike.")
+        }
+    }
+
+    // An installer the user already has costs no download, so the size that
+    // matters differs with where the version comes from.
+    private func macOSSummary(for plan: MacOSMediaPlan) -> String {
+        let drive = "needs about \(plan.estimatedDriveBytes.formattedSize) on the drive"
+
+        switch plan.installer.origin {
+        case .catalog, .softwareUpdate:
+            return "Downloads \(plan.installer.sizeBytes.formattedSize) from Apple · \(drive)"
+        case .application, .package:
+            return "Ready to write · \(drive)"
+        }
     }
 
     private var destinationHeader: some View {
@@ -177,14 +326,16 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity)
             }
             .controlSize(.large)
-            .disabled(isStopping)
+            // Nothing is running to be stopped while the authorization prompt is
+            // up; dismissing that prompt is what ends the run.
+            .disabled(!viewModel.processState.isCancellable)
         } else {
             Button {
                 if viewModel.confirmErase() {
                     viewModel.createBootableUSB()
                 }
             } label: {
-                Text("Create Bootable Drive")
+                Text(viewModel.mediaKind == .windows ? "Create Bootable Drive" : "Create macOS Installer")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
@@ -260,10 +411,13 @@ struct ContentView: View {
             }
         }
 
-        // The type is only known here, so a non-ISO drop is reported by the
-        // view model rather than dropped silently.
+        // The type is only known here, so a drop the mode cannot use is reported
+        // by the view model rather than dropped silently.
         providersRemaining.notify(queue: .main) {
-            viewModel.addISOs(dropped.urls)
+            switch viewModel.mediaKind {
+            case .windows: viewModel.addISOs(dropped.urls)
+            case .macOS: viewModel.addInstallers(dropped.urls)
+            }
         }
 
         return true
