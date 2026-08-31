@@ -92,15 +92,19 @@ final class MacOSMediaBuilder {
                 from: packageURL,
                 expecting: installer.sizeBytes,
                 to: destination
-            ) { [weak self] percent in
+            ) { [weak self] progress in
                 guard let self else { return }
 
                 self.state.progress = MediaBuilder.overallProgress(
-                    percent,
+                    progress.percent,
                     from: Milestone.checked,
                     to: Milestone.downloaded
                 )
-                self.state.currentFile = installer.title
+                // An 18 GB download that only moves a bar looks stalled, so the
+                // status line carries the rate it is actually running at.
+                self.state.currentFile = [installer.title, progress.rate]
+                    .compactMap { $0 }
+                    .joined(separator: " · ")
             }
 
             return (.package(destination), Milestone.downloaded)

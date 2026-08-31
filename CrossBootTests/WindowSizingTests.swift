@@ -96,7 +96,7 @@ final class WindowSizingTests: XCTestCase {
                 ("a local installer selected", try macOSViewModel(versions: 3, local: true)),
                 ("downloading", try macOSViewModel(
                     versions: 3,
-                    state: ProcessState(stage: .downloading, progress: 20, currentFile: "macOS Tahoe 26.6.2")
+                    state: ProcessState(stage: .downloading, progress: 20, currentFile: "macOS Tahoe 26.6.2 · 24.3 MB/s")
                 )),
                 ("waiting on the password", try macOSViewModel(
                     versions: 3,

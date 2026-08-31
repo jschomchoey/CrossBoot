@@ -14,7 +14,7 @@ actor InstallerDownloader {
         from url: URL,
         expecting expectedBytes: Int64,
         to destination: URL,
-        onProgress: @escaping @Sendable @MainActor (Double) -> Void
+        onProgress: @escaping @Sendable @MainActor (DownloadProgress) -> Void
     ) async throws {
         let delegate = DownloadDelegate(destination: destination, onProgress: onProgress)
         let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
@@ -46,19 +46,27 @@ actor InstallerDownloader {
     }
 }
 
+// What a running download has to say for itself.
+struct DownloadProgress: Equatable, Sendable {
+    let percent: Double
+    // Nil until the rate has been measured over a full window.
+    let rate: String?
+}
+
 // URLSession reports progress on its own queue and finishes on another, so the
 // continuation is guarded rather than assumed to be touched once.
 private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
     private let destination: URL
-    private let onProgress: @Sendable @MainActor (Double) -> Void
+    private let onProgress: @Sendable @MainActor (DownloadProgress) -> Void
 
     private let lock = NSLock()
     private var continuation: CheckedContinuation<Void, Error>?
     // A download of this size reports progress tens of thousands of times;
     // only a change the progress bar could show is worth waking the UI for.
     private var reportedPercent = -1
+    private var rate = TransferRate()
 
-    init(destination: URL, onProgress: @escaping @Sendable @MainActor (Double) -> Void) {
+    init(destination: URL, onProgress: @escaping @Sendable @MainActor (DownloadProgress) -> Void) {
         self.destination = destination
         self.onProgress = onProgress
     }
@@ -89,16 +97,21 @@ private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate, @unc
 
         let percent = Int(Double(totalBytesWritten) / Double(totalBytesExpectedToWrite) * 1000)
 
+        // The rate is measured from every report, not only from the ones that
+        // move the bar, so a slow stretch is measured as slowly as it ran. It is
+        // only put into words for the reports that reach the UI.
         lock.lock()
+        rate.record(totalBytesWritten, at: ProcessInfo.processInfo.systemUptime)
         let changed = percent != reportedPercent
         if changed { reportedPercent = percent }
+        let measured = changed ? rate.formatted : nil
         lock.unlock()
 
         guard changed else { return }
 
-        let value = Double(percent) / 10
+        let progress = DownloadProgress(percent: Double(percent) / 10, rate: measured)
         let report = onProgress
-        Task { @MainActor in report(value) }
+        Task { @MainActor in report(progress) }
     }
 
     // The temporary file is gone as soon as this returns, so the move cannot be
