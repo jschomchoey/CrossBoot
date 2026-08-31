@@ -3,8 +3,8 @@ import UniformTypeIdentifiers
 
 /// The whole app on one page: the mode sits in the toolbar, the setup form
 /// under it, and the run reports at the bottom. Everything stays put while a run
-/// is in flight - the form locks and the button turns into Stop - and both modes
-/// lay out to the one height the window is fixed at.
+/// is in flight - the form locks and the button turns into Stop - so the only
+/// thing that ever resizes the window is switching mode.
 struct ContentView: View {
     @StateObject private var viewModel: CrossBootViewModel
 
@@ -58,11 +58,6 @@ struct ContentView: View {
                             Text("Lets setup finish with a local account instead of a Microsoft account.")
                         }
                     } else {
-                        Toggle(isOn: $viewModel.showsUnusableVersions) {
-                            Text("Show Versions This Mac Cannot Build")
-                            Text("Lists releases that need a newer macOS, or predate Apple Silicon.")
-                        }
-
                         Toggle(isOn: $viewModel.removesPreparedInstaller) {
                             Text("Remove the Installer Afterwards")
                             Text("Deletes the installer this run leaves in /Applications.")
@@ -75,6 +70,11 @@ struct ContentView: View {
             // nothing to reveal. Left enabled it reports one point more content
             // than it was given and leaves a scroll bar sitting there.
             .scrollDisabled(true)
+            // A scroll view otherwise takes whatever height it is offered, which
+            // leaves the window at its last height with the difference sitting
+            // empty above the action bar. Held to its content, the form is what
+            // the window sizes itself to.
+            .fixedSize(horizontal: false, vertical: true)
             // Nothing here may change mid-run: the drive is already being erased.
             .disabled(viewModel.processState.isProcessing)
 
@@ -167,6 +167,12 @@ struct ContentView: View {
                     viewModel.removeInstaller(selected)
                 }
             }
+
+            Divider()
+
+            // The filter belongs to the menu it filters, not to a section
+            // further down the page.
+            Toggle("Show Versions This Mac Cannot Build", isOn: $viewModel.showsUnusableVersions)
 
             Divider()
 

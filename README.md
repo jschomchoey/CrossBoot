@@ -97,7 +97,7 @@ before anything is erased:
 - **A release older than Big Sur cannot be built on Apple Silicon.** The media would write successfully and then
   boot nothing.
 
-Versions this Mac cannot build are hidden until you ask for them under Advanced Options.
+Versions this Mac cannot build are hidden until you ask for them in the menu beside **macOS Version**.
 
 ### What it does to your Mac
 

@@ -3,11 +3,11 @@ import SwiftUI
 import AppKit
 @testable import CrossBoot
 
-// The window is one fixed size. Each mode has to report the same height in every
-// state it can reach, whatever is showing in the status line, because a
-// scroll-disabled form just clips whatever does not fit - and the window itself
-// has to be the height those pages ask for, or it ends in a band of empty
-// window above the action bar.
+// The window is as tall as the page inside it, so each mode has to report the
+// same height in every state it can reach, whatever is showing in the status
+// line: a window that resized itself mid-run would move the Stop button out from
+// under the pointer. The two modes may differ - switching mode is what resizes
+// the window - as long as each fits the display the app has to fit.
 @MainActor
 final class WindowSizingTests: XCTestCase {
 
@@ -111,39 +111,19 @@ final class WindowSizingTests: XCTestCase {
         )
     }
 
-    // A window taller than both pages is what leaves the empty band; a window
-    // shorter than either clips it.
-    func testTheWindowIsTheHeightOfTheTallerPage() throws {
-        let windows = fittingHeight(of: try viewModel())
-        let macOS = fittingHeight(of: try macOSViewModel(versions: 3))
-
-        XCTAssertEqual(
-            max(windows, macOS), WindowLayout.height, accuracy: 1,
-            "the pages want \(windows)pt and \(macOS)pt but the window is fixed at \(WindowLayout.height)pt"
-        )
-    }
-
-    // The window is shared, so a page may ask for less than it - the two modes
-    // hold different controls - but not for much less, and never for more.
-    @discardableResult
     private func assertOneHeight(
         named mode: String,
         across states: [(String, CrossBootViewModel)],
         file: StaticString = #filePath,
         line: UInt = #line
-    ) throws -> CGFloat {
+    ) throws {
         let first = try XCTUnwrap(states.first, file: file, line: line)
         let height = fittingHeight(of: first.1)
 
         XCTAssertGreaterThan(height, 0, "\(mode) reported no height at all", file: file, line: line)
         XCTAssertLessThanOrEqual(
-            height, WindowLayout.height,
-            "\(mode) wants \(height)pt but the window is fixed at \(WindowLayout.height)pt",
-            file: file, line: line
-        )
-        XCTAssertGreaterThan(
-            height, WindowLayout.height - Self.largestEmptyBand,
-            "\(mode) wants \(height)pt, which leaves an empty band under a \(WindowLayout.height)pt window",
+            height, WindowLayout.maximumHeight,
+            "\(mode) wants \(height)pt, more than the \(WindowLayout.maximumHeight)pt a window may take",
             file: file, line: line
         )
 
@@ -154,13 +134,7 @@ final class WindowSizingTests: XCTestCase {
                 file: file, line: line
             )
         }
-
-        return height
     }
-
-    // What the shorter of the two pages may leave unused before the gap above
-    // the action bar reads as a layout mistake rather than as spacing.
-    private static let largestEmptyBand: CGFloat = 40
 
     private func macOSViewModel(
         versions: Int = 0,
