@@ -27,6 +27,10 @@ class CrossBootViewModel: ObservableObject {
     // MARK: - Task Management
     private var currentTask: Task<Void, Never>?
 
+    // Analysis runs one batch at a time, in the order the batches arrived.
+    private var analysisTask: Task<Void, Never>?
+    private var pendingBatches = 0
+
     // MARK: - Initialization
 
     init() {
@@ -84,7 +88,23 @@ class CrossBootViewModel: ObservableObject {
     func addISOs(_ urls: [URL]) {
         guard !processState.isProcessing else { return }
 
-        Task { await analyze(urls) }
+        // A second drop can land while the first is still being read. Running
+        // both at once let each one check the list before the other appended to
+        // it - listing the same ISO twice - and let the first to finish report
+        // that analysis was over while the other was still mounting. Batches
+        // are queued instead, and the flag stays up until the last one is done.
+        pendingBatches += 1
+        isAnalyzing = true
+
+        let previous = analysisTask
+        analysisTask = Task { [weak self] in
+            await previous?.value
+            await self?.analyze(urls)
+
+            guard let self else { return }
+            self.pendingBatches -= 1
+            self.isAnalyzing = self.pendingBatches > 0
+        }
     }
 
     func removeISO(_ iso: ISOFile) {
@@ -98,9 +118,6 @@ class CrossBootViewModel: ObservableObject {
     // Setup could not handle is refused here rather than after the drive is
     // erased. It also gives the list something to say about each file.
     private func analyze(_ urls: [URL]) async {
-        isAnalyzing = true
-        defer { isAnalyzing = false }
-
         for url in urls {
             guard url.pathExtension.lowercased() == "iso" else {
                 inputError = "\(url.lastPathComponent) is not an ISO file"
