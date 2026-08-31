@@ -208,8 +208,8 @@ enum DiskError: LocalizedError {
             return "The drive holds \(available.formattedSize) but \(required.formattedSize) is needed. Nothing was erased."
         case .insufficientScratchSpace(let required, let available):
             return """
-            Combining these ISOs needs \(required.formattedSize) of free space on this Mac while it works, \
-            but only \(available.formattedSize) is available. Nothing was erased.
+            This Mac needs \(required.formattedSize) of free space but has \(available.formattedSize). \
+            Nothing was erased.
             """
         case .infoUnavailable(let device):
             return "Could not read disk information for \(device)"

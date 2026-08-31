@@ -53,8 +53,10 @@ data long after the firmware has handed over. There is no shim to install and no
 
 Two limits follow from how Windows Setup works:
 
-- **One architecture per drive.** x64 and ARM64 ISOs cannot share a drive, and CrossBoot refuses the combination
-  when you add the second ISO rather than after erasing the drive.
+- **One architecture per drive.** x64 and ARM64 firmware each load their own boot loader, and both loaders can sit
+  on one drive. What they cannot share is what comes next: a single `\sources\boot.wim` and a single BCD, both at
+  fixed paths. Separating them means authoring a new BCD, which is a Windows registry hive, so CrossBoot refuses
+  the combination when you add the second ISO rather than after erasing the drive.
 - **The newest Windows supplies setup.** Its setup can deploy older images; an older setup cannot deploy newer
   ones. CrossBoot picks the base ISO for you.
 

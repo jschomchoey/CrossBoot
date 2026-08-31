@@ -50,7 +50,7 @@ struct ISOListView: View {
                 .fill(Color(NSColor.textBackgroundColor))
 
             if isoFiles.isEmpty {
-                Text("Drag Windows ISO files here, or anywhere onto this window.")
+                Text("Drag Windows ISO files here")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)

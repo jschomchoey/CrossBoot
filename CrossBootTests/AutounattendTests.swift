@@ -15,9 +15,14 @@ final class AutounattendTests: XCTestCase {
         try? FileManager.default.removeItem(at: directory)
     }
 
-    private func write(requirements: Bool, onlineAccount: Bool) async throws -> String {
+    private func write(
+        requirements: Bool,
+        onlineAccount: Bool,
+        architecture: WindowsArchitecture = .x64
+    ) async throws -> String {
         try await ISOHandler.shared.createAutounattend(
             at: directory.path,
+            architecture: architecture,
             bypassRequirements: requirements,
             bypassOnlineAccount: onlineAccount
         )
@@ -63,6 +68,32 @@ final class AutounattendTests: XCTestCase {
         let document = try XMLDocument(xmlString: xml, options: [])
         let passes = try document.nodes(forXPath: "//*[local-name()='settings']")
         XCTAssertEqual(passes.count, 2)
+    }
+
+    // Setup ignores a component whose processorArchitecture does not match the
+    // WinPE running it, so an amd64 answer file on ARM64 media is a bypass that
+    // silently does nothing.
+    func testEveryComponentDeclaresTheMediaArchitecture() async throws {
+        let arm = try await write(requirements: true, onlineAccount: true, architecture: .arm64)
+
+        assertWellFormed(arm)
+        XCTAssertFalse(arm.contains("amd64"))
+
+        let document = try XMLDocument(xmlString: arm, options: [])
+        let components = try document.nodes(forXPath: "//*[local-name()='component']")
+        XCTAssertEqual(components.count, 2)
+
+        for component in components {
+            let element = try XCTUnwrap(component as? XMLElement)
+            XCTAssertEqual(element.attribute(forName: "processorArchitecture")?.stringValue, "arm64")
+        }
+    }
+
+    func testIntelMediaStillDeclaresAmd64() async throws {
+        let intel = try await write(requirements: true, onlineAccount: false, architecture: .x64)
+
+        assertWellFormed(intel)
+        XCTAssertTrue(intel.contains(#"processorArchitecture="amd64""#))
     }
 
     func testNeitherBypassStillProducesValidXML() async throws {

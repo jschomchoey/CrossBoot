@@ -138,10 +138,7 @@ class CrossBootViewModel: ObservableObject {
             return nil
         }
 
-        return """
-        \(iso.name) is \(added.name) but the drive already holds \(existing.name) media. \
-        Windows Setup boots one architecture, so they cannot share a drive.
-        """
+        return "\(iso.name) is \(added.name) but the other ISOs are \(existing.name). It was not added."
     }
 
     // MARK: - Main Process
@@ -237,10 +234,7 @@ class CrossBootViewModel: ObservableObject {
         }
 
         let count = groups.flatMap(\.images).count
-        return """
-        The drive is ready with \(count) Windows editions from \(groups.count) ISOs. \
-        Windows Setup will ask which one to install. Eject it and boot from it.
-        """
+        return "The drive is ready with \(count) Windows editions. You can eject it and boot from it."
     }
 
     private func showAlert(title: String, message: String, style: NSAlert.Style) {

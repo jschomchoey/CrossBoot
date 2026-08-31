@@ -251,9 +251,12 @@ actor ISOHandler {
     /// Create autounattend.xml for Windows 11 bypass
     func createAutounattend(
         at usbPath: String,
+        architecture: WindowsArchitecture,
         bypassRequirements: Bool,
         bypassOnlineAccount: Bool
     ) throws {
+        let processorArchitecture = architecture.unattendName
+
         var content = """
         <?xml version="1.0" encoding="utf-8"?>
         <unattend xmlns="urn:schemas-microsoft-com:unattend">
@@ -263,7 +266,7 @@ actor ISOHandler {
             content += """
             
             <settings pass="windowsPE">
-                <component name="Microsoft-Windows-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+                <component name="Microsoft-Windows-Setup" processorArchitecture="\(processorArchitecture)" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
                     <UserData>
                         <ProductKey>
                             <Key></Key>
@@ -300,7 +303,7 @@ actor ISOHandler {
             content += """
             
             <settings pass="specialize">
-                <component name="Microsoft-Windows-Deployment" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
+                <component name="Microsoft-Windows-Deployment" processorArchitecture="\(processorArchitecture)" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State">
                     <RunSynchronous>
                         <RunSynchronousCommand wcm:action="add">
                             <Order>1</Order>

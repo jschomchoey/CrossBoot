@@ -15,6 +15,18 @@ enum WindowsArchitecture: Int, Hashable {
         case .arm64: return "ARM64"
         }
     }
+
+    // processorArchitecture in an answer file. Setup silently ignores a
+    // component whose architecture does not match the WinPE running it, which
+    // is how a bypass can appear to be configured and do nothing.
+    var unattendName: String {
+        switch self {
+        case .x86: return "x86"
+        case .arm: return "arm"
+        case .x64: return "amd64"
+        case .arm64: return "arm64"
+        }
+    }
 }
 
 // One installable edition inside an ISO's install.wim or install.esd.

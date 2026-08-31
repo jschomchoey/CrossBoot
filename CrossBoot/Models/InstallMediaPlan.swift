@@ -38,6 +38,13 @@ struct InstallMediaPlan {
         }
     }
 
+    // Every source shares one architecture, so the base speaks for the drive.
+    // Media with no readable image metadata is assumed x64, which is what
+    // CrossBoot wrote for every drive before it read metadata at all.
+    var architecture: WindowsArchitecture {
+        base.architecture ?? sources.compactMap(\.architecture).first ?? .x64
+    }
+
     var plannedImages: [PlannedImage] {
         switch mode {
         case .single: return []
@@ -168,16 +175,13 @@ enum MediaPlanError: LocalizedError, Equatable {
         case .noSources:
             return "No ISO selected"
         case .noImages:
-            return "None of the selected ISOs contain a Windows image to install"
+            return "No Windows image to install was found in the selected ISOs."
         case .noBootLoader:
-            return "None of the selected ISOs carry a UEFI boot loader, so the drive could not boot."
+            return "None of the selected ISOs can boot. Add one that contains a UEFI boot loader."
         case .noInstallImage(let name):
-            return "\(name) has no sources/install.wim, so it cannot be combined with other ISOs. Use it on its own."
+            return "\(name) has no Windows image to install. Remove it, or use it on its own."
         case .mixedArchitectures(let names):
-            return """
-            The selected ISOs are \(names.joined(separator: " and ")). \
-            One drive can only hold one architecture, because Windows Setup boots a single one.
-            """
+            return "\(names.joined(separator: " and ")) ISOs cannot share a drive. Keep one architecture."
         }
     }
 }

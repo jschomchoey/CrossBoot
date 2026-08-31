@@ -99,6 +99,7 @@ final class MediaBuilder {
         if bypassRequirements || bypassOnlineAccount {
             try await isoHandler.createAutounattend(
                 at: usbPath,
+                architecture: plan.architecture,
                 bypassRequirements: bypassRequirements,
                 bypassOnlineAccount: bypassOnlineAccount
             )

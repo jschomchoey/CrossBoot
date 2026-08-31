@@ -27,10 +27,7 @@ struct ContentView: View {
                 } header: {
                     Text("Windows ISOs")
                 } footer: {
-                    Text("""
-                    Add more than one to put several Windows versions on the same drive. \
-                    Setup asks which one to install, and the drive still boots with Secure Boot on.
-                    """)
+                    Text("Add more than one ISO to put several Windows versions on the same drive.")
                 }
 
                 Section {
@@ -178,7 +175,7 @@ struct ContentView: View {
         let stage = viewModel.processState.stage.description
         let file = viewModel.processState.currentFile
 
-        return file.isEmpty ? stage : "\(stage) — \(file)"
+        return file.isEmpty ? stage : "\(stage) · \(file)"
     }
 
     private var statusTint: Color {
