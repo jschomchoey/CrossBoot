@@ -20,12 +20,6 @@ extension CrossBootViewModel {
         isLoadingVersions = true
         defer { isLoadingVersions = false }
 
-        // Asked for its side effect, once macOS media is what the user is here
-        // for: the refusal is what puts CrossBoot in the Full Disk Access list,
-        // and the list is where they will go looking for it. The answer itself
-        // is what matters when a run starts.
-        _ = FullDiskAccess.isGranted
-
         let catalog = Task { try await SoftwareCatalog.shared.installers(refresh: refresh) }
         let offered = Task { try await InstallerSource.softwareUpdateInstallers() }
         // Reading a bundle walks it for its size, which is not the main thread's
@@ -173,32 +167,6 @@ extension CrossBootViewModel {
     // Without Full Disk Access, createinstallmedia is refused its last step -
     // after the download, and after the drive has been erased and written. That
     // is far too late to find out, so it is asked for before anything starts.
-    func confirmAccess() -> Bool {
-        guard mediaKind == .macOS, !FullDiskAccess.isGranted else { return true }
-
-        let alert = NSAlert()
-        alert.messageText = "CrossBoot needs Full Disk Access"
-        alert.informativeText = """
-        macOS refuses the last step of writing a macOS installer - making the drive bootable - \
-        unless CrossBoot has Full Disk Access.
-
-        Switch CrossBoot on in Privacy & Security > Full Disk Access, then quit and reopen it. \
-        If it is not listed there, add it with the + button; "Show CrossBoot" reveals the app to drag in.
-        """
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "Open Settings")
-        alert.addButton(withTitle: "Show CrossBoot")
-        alert.addButton(withTitle: "Cancel")
-
-        switch alert.runModal() {
-        case .alertFirstButtonReturn: FullDiskAccess.openSettings()
-        case .alertSecondButtonReturn: FullDiskAccess.showApplication()
-        default: break
-        }
-
-        return false
-    }
-
     var macOSPlan: MacOSMediaPlan? {
         guard let selectedVersion else { return nil }
         return try? MacOSMediaPlan.make(for: selectedVersion)
@@ -251,11 +219,37 @@ extension CrossBootViewModel {
             await releaseResources()
 
             processState = .failed(error.localizedDescription)
-            showAlert(title: "Could not finish", message: error.localizedDescription, style: .critical)
+            report(error)
             return
         }
 
         await releaseResources()
+    }
+
+    // A run macOS refused is a permission the user can grant, so the alert takes
+    // them to the pane that grants it rather than only naming it.
+    private func report(_ error: Error) {
+        let pane: (() -> Void)?
+
+        switch error as? PrivilegedError {
+        case .accessRefused: pane = SettingsPane.openFullDiskAccess
+        case .terminalRefused: pane = SettingsPane.openAutomation
+        default: pane = nil
+        }
+
+        guard let pane else {
+            showAlert(title: "Could not finish", message: error.localizedDescription, style: .critical)
+            return
+        }
+
+        let alert = NSAlert()
+        alert.messageText = "Could not finish"
+        alert.informativeText = error.localizedDescription
+        alert.alertStyle = .critical
+        alert.addButton(withTitle: "Open Settings")
+        alert.addButton(withTitle: "OK")
+
+        if alert.runModal() == .alertFirstButtonReturn { pane() }
     }
 
     private static func successMessage(for plan: MacOSMediaPlan, removesInstaller: Bool) -> String {

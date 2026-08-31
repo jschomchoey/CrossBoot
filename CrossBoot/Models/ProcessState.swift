@@ -31,7 +31,7 @@ enum ProcessStage: Equatable {
         case .splitting: return "Splitting install.wim"
         case .copying: return "Copying files"
         case .downloading: return "Downloading macOS"
-        case .authorizing: return "Waiting for your password"
+        case .authorizing: return "Waiting for your password in Terminal"
         case .preparingInstaller: return "Preparing the macOS installer"
         case .writingInstaller: return "Writing the macOS installer"
         case .aborting: return "Stopping"

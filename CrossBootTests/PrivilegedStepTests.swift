@@ -31,7 +31,8 @@ final class PrivilegedStepTests: XCTestCase {
             log: URL(fileURLWithPath: "/tmp/work/run.log"),
             cancel: URL(fileURLWithPath: "/tmp/work/cancel"),
             ready: URL(fileURLWithPath: "/tmp/work/ready"),
-            heartbeat: URL(fileURLWithPath: "/tmp/work/heartbeat")
+            heartbeat: URL(fileURLWithPath: "/tmp/work/heartbeat"),
+            accessProbe: "/tmp/work/probe"
         )
     }
 
@@ -45,6 +46,7 @@ final class PrivilegedStepTests: XCTestCase {
             "/tmp/work/cancel",
             "/tmp/work/ready",
             "/tmp/work/heartbeat",
+            "/tmp/work/probe",
             "package",
             "/tmp/InstallAssistant.pkg",
             "/Applications/Install macOS Tahoe.app",
@@ -56,8 +58,8 @@ final class PrivilegedStepTests: XCTestCase {
     }
 
     func testEachPreparationNamesItsOwnKindAndSource() {
-        XCTAssertEqual(argv(request(preparation: .fetch(version: "13.7.8")))[5...6].map { $0 }, ["fetch", "13.7.8"])
-        XCTAssertEqual(argv(request(preparation: .application))[5...6].map { $0 }, ["application", ""])
+        XCTAssertEqual(argv(request(preparation: .fetch(version: "13.7.8")))[6...7].map { $0 }, ["fetch", "13.7.8"])
+        XCTAssertEqual(argv(request(preparation: .application))[6...7].map { $0 }, ["application", ""])
     }
 
     func testRemovingThePreparedInstallerIsOptedInto() {
@@ -74,6 +76,58 @@ final class PrivilegedStepTests: XCTestCase {
         XCTAssertTrue(arguments.contains(hostile), "the value was rewritten before it reached argv")
         // It is one argv item, not something that was split or escaped in place.
         XCTAssertEqual(arguments.filter { $0 == hostile }.count, 1)
+    }
+
+    // The step is handed to Terminal as one command line, so every value has to
+    // survive a shell that would otherwise read it as code. This runs that shell.
+    func testHostileValuesSurviveTheCommandLineTheyAreQuotedOnto() throws {
+        let hostile = [
+            "a\"b $(id) `id` ; rm -rf /",
+            "it's a drive",
+            "line\nbreak",
+            "$HOME/../etc",
+            "*"
+        ]
+
+        let echoed = try echo(hostile)
+
+        XCTAssertEqual(echoed, hostile)
+    }
+
+    // Runs `/bin/sh -c` on the quoted arguments and reads back what the shell
+    // made of them.
+    private func echo(_ values: [String]) throws -> [String] {
+        let quoted = values.map(PrivilegedRunner.shellQuoted).joined(separator: " ")
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        // NUL-separated, because an argument may contain anything else.
+        process.arguments = ["-c", "printf '%s\\0' \(quoted)"]
+
+        let output = Pipe()
+        process.standardOutput = output
+
+        try process.run()
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+
+        return String(decoding: data, as: UTF8.self)
+            .split(separator: "\0", omittingEmptySubsequences: true)
+            .map(String.init)
+    }
+
+    // The app never sees the step run: it hands Terminal a command line and then
+    // waits for the status that command leaves behind.
+    func testTheCommandSudoesTheStepAndLeavesItsStatusBehind() {
+        let command = PrivilegedRunner.command(
+            argv(request(volume: "it's a drive")),
+            status: URL(fileURLWithPath: "/tmp/work/status")
+        )
+
+        XCTAssertTrue(command.contains("/usr/bin/sudo -- '/tmp/work/run.sh'"), command)
+        XCTAssertTrue(command.hasSuffix("; echo $? > '/tmp/work/status'"), command)
+        // Quoted, not dropped: the volume name reaches the step as it was typed.
+        XCTAssertTrue(command.contains(#"'it'\''s a drive'"#), command)
     }
 
     // MARK: - The script itself
@@ -138,6 +192,23 @@ final class PrivilegedStepTests: XCTestCase {
         XCTAssertLessThan(wait.lowerBound, erase.lowerBound)
     }
 
+    // The bless at the end is what needs Full Disk Access, and the drive is
+    // erased long before it. The step therefore asks first and erases nothing.
+    func testTheStepGivesUpBeforeErasingWhenItHasNoFullDiskAccess() throws {
+        XCTAssertEqual(try runScript(ready: true, access: false), 77)
+    }
+
+    func testTheAccessCheckComesBeforeAnythingIsTouched() throws {
+        let script = PrivilegedRunner.script
+
+        let check = try XCTUnwrap(script.range(of: "! -r \"$ACCESS\""))
+        let wait = try XCTUnwrap(script.range(of: "while [ ! -e \"$READY\" ]"))
+        let erase = try XCTUnwrap(script.range(of: "eraseDisk"))
+
+        XCTAssertLessThan(check.lowerBound, wait.lowerBound)
+        XCTAssertLessThan(check.lowerBound, erase.lowerBound)
+    }
+
     func testTheStepRunsOnceTheDownloadIsReady() throws {
         // 66 is the step's own "this is not an installer application", which is
         // the first thing it checks after the wait.
@@ -160,7 +231,8 @@ final class PrivilegedStepTests: XCTestCase {
     private func runScript(
         ready: Bool,
         cancel: Bool = false,
-        heartbeat: Date? = Date()
+        heartbeat: Date? = Date(),
+        access: Bool = true
     ) throws -> Int32 {
         let directory = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("crossboot-step-\(UUID().uuidString)")
@@ -172,8 +244,13 @@ final class PrivilegedStepTests: XCTestCase {
         let cancelURL = directory.appendingPathComponent("cancel")
         let readyURL = directory.appendingPathComponent("ready")
         let heartbeatURL = directory.appendingPathComponent("heartbeat")
+        // Stands in for TCC's database: readable when the step would be allowed
+        // to finish, missing when it would not.
+        let accessURL = directory.appendingPathComponent("access")
 
         try PrivilegedRunner.script.write(to: scriptURL, atomically: true, encoding: .utf8)
+
+        if access { FileManager.default.createFile(atPath: accessURL.path, contents: nil) }
 
         if ready { FileManager.default.createFile(atPath: readyURL.path, contents: nil) }
         if cancel { FileManager.default.createFile(atPath: cancelURL.path, contents: nil) }
@@ -193,6 +270,7 @@ final class PrivilegedStepTests: XCTestCase {
             cancelURL.path,
             readyURL.path,
             heartbeatURL.path,
+            accessURL.path,
             "application",
             "",
             directory.appendingPathComponent("Install macOS Nothing.app").path,
