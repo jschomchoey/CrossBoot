@@ -82,6 +82,7 @@ struct ContentView: View {
         }
         .frame(maxWidth: .infinity)
         .background(Color(NSColor.windowBackgroundColor))
+        .background(WindowFrameOwner())
         // Dropping anywhere in the window beats aiming at a small zone.
         .onDrop(of: [.fileURL], isTargeted: dropTarget, perform: handleDrop)
         .overlay(dropHighlight)
@@ -431,6 +432,37 @@ struct ContentView: View {
         }
 
         return true
+    }
+}
+
+// The window's height belongs to the page, and to nothing else.
+//
+// SwiftUI gives the window an autosaved frame, which macOS restores before the
+// page is laid out: a window last closed in macOS mode reopens that height in
+// Windows mode with the bottom of the page cut off. Nothing about the height is
+// worth remembering, so the frame is neither saved nor restored, and the one
+// already restored is put back to what the page asks for.
+private struct WindowFrameOwner: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+
+        // The view has no window until it has been added to one.
+        DispatchQueue.main.async { own(view.window) }
+
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    private func own(_ window: NSWindow?) {
+        guard let window else { return }
+
+        window.isRestorable = false
+        window.setFrameAutosaveName("")
+
+        if let content = window.contentView {
+            window.setContentSize(content.fittingSize)
+        }
     }
 }
 
