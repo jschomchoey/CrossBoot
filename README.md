@@ -61,8 +61,9 @@ Two limits follow from how Windows Setup works:
   ones. CrossBoot picks the base ISO for you.
 
 Merging rewrites the install image on your Mac before anything reaches the drive, so it needs free scratch space
-of roughly twice the combined size of the source install images. CrossBoot checks for it up front and stops
-without erasing anything if the space is not there.
+of roughly twice the combined size of the source install images. CrossBoot checks for the space up front, and the
+drive is not erased until the rewriting and splitting are finished, so a run that cannot complete leaves it as it
+was.
 
 ## Development
 

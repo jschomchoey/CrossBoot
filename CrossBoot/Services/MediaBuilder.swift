@@ -22,10 +22,10 @@ final class MediaBuilder {
 
     // Points on the overall progress bar where each stage hands over to the next.
     private enum Milestone {
-        static let formatStarted: Double = 2
-        static let formatted: Double = 5
-        static let mergeEnd: Double = 65
+        static let mounted: Double = 2
+        static let rebuildEnd: Double = 65
         static let splitShare: Double = 15
+        static let formatShare: Double = 3
         static let copied: Double = 99
     }
 
@@ -65,17 +65,26 @@ final class MediaBuilder {
             throw ISOError.mountFailed
         }
 
-        state = ProcessState(stage: .formatting, progress: Milestone.formatStarted)
+        state.progress = Milestone.mounted
+
+        // Rewriting and splitting the install image is the long, failure-prone
+        // part of a run, and none of it needs the drive. Doing it first means a
+        // wimlib refusal - a solid image, a source that went away - leaves the
+        // user's drive as it was instead of erased and half written.
+        let prepared = try await prepareInstallSources(plan, mounts: mounts)
+
+        try Task.checkCancellation()
+
+        state = ProcessState(stage: .formatting, progress: prepared.progress)
         try await diskManager.formatDrive(drive)
 
         try Task.checkCancellation()
-        state.progress = Milestone.formatted
+        let copyStart = prepared.progress + Milestone.formatShare
+        state.progress = copyStart
 
         guard let usbPath = await diskManager.getMountPoint(drive.device) else {
             throw DiskError.mountPointNotFound
         }
-
-        let prepared = try await prepareInstallSources(plan, mounts: mounts)
 
         state.stage = .copying
         state.currentFile = ""
@@ -90,7 +99,7 @@ final class MediaBuilder {
 
             self.state.progress = Self.overallProgress(
                 progress,
-                from: prepared.progress,
+                from: copyStart,
                 to: Milestone.copied
             )
             self.state.currentFile = fileName
@@ -123,12 +132,12 @@ final class MediaBuilder {
             guard let image = iso.installImage,
                   image.sizeBytes > WimLibService.fat32FileLimit,
                   let mount = mounts[iso.url] else {
-                return (nil, [], Milestone.formatted)
+                return (nil, [], Milestone.mounted)
             }
 
             let wimPath = (mount as NSString).appendingPathComponent(image.relativePath)
-            let splitEnd = Milestone.formatted + Milestone.splitShare
-            let parts = try await splitInstallImage(at: wimPath, from: Milestone.formatted, to: splitEnd)
+            let splitEnd = Milestone.mounted + Milestone.splitShare
+            let parts = try await splitInstallImage(at: wimPath, from: Milestone.mounted, to: splitEnd)
 
             return (parts, [image.relativePath.lowercased()], splitEnd)
 
@@ -149,11 +158,11 @@ final class MediaBuilder {
             try await mergeImages(groups, compression: compression, mounts: mounts, into: merged)
 
             guard Self.fileSize(at: merged) > WimLibService.fat32FileLimit else {
-                return (workDirectory, excluded, Milestone.mergeEnd)
+                return (workDirectory, excluded, Milestone.rebuildEnd)
             }
 
-            let splitEnd = Milestone.mergeEnd + Milestone.splitShare
-            let parts = try await splitInstallImage(at: merged.path, from: Milestone.mergeEnd, to: splitEnd)
+            let splitEnd = Milestone.rebuildEnd + Milestone.splitShare
+            let parts = try await splitInstallImage(at: merged.path, from: Milestone.rebuildEnd, to: splitEnd)
 
             // The merged image was only an input to the split; dropping it now
             // frees its space before the copy starts.
@@ -198,8 +207,8 @@ final class MediaBuilder {
                     let done = Double(alreadyDone) + Double(weight) * Double(percent) / 100
                     self.state.progress = Self.overallProgress(
                         done / Double(totalWeight) * 100,
-                        from: Milestone.formatted,
-                        to: Milestone.mergeEnd
+                        from: Milestone.mounted,
+                        to: Milestone.rebuildEnd
                     )
                     self.state.currentFile = planned.name
                 }
