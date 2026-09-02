@@ -163,3 +163,64 @@ final class MacOSMediaPlanTests: XCTestCase {
         XCTAssertNotEqual(installer().id, installer(origin: .softwareUpdate).id)
     }
 }
+
+// The progress bar is drawn from what a run actually does. A run with nothing to
+// download must not spend a third of the bar not downloading anything, and the
+// part that takes the time has to own the part of the bar that shows it.
+final class ProgressBarTests: XCTestCase {
+
+    private func bar(_ origin: MacOSInstaller.Origin) -> MacOSMediaBuilder.Bar {
+        MacOSMediaBuilder.Bar.forRun(with: origin)
+    }
+
+    private var catalog: MacOSInstaller.Origin {
+        .catalog(productID: "140-93587", packageURL: URL(fileURLWithPath: "/tmp/InstallAssistant.pkg"))
+    }
+
+    // An installer already sitting in /Applications: writing the drive is the
+    // whole run, so it gets nearly the whole bar.
+    func testAnInstallerOnDiskGivesTheWriteTheWholeBar() {
+        let bar = bar(.application(URL(fileURLWithPath: "/Applications/Install macOS Sequoia.app")))
+
+        XCTAssertEqual(bar.downloaded, MacOSMediaBuilder.Bar.checked)
+        XCTAssertEqual(bar.prepared, MacOSMediaBuilder.Bar.checked)
+        XCTAssertLessThan(bar.erased, 15, "the bar jumps past a tenth of itself before anything slow happens")
+    }
+
+    // A download and a write are both tens of minutes, so they share the bar.
+    func testADownloadedInstallerSharesTheBarWithTheWrite() {
+        let bar = bar(catalog)
+
+        XCTAssertGreaterThan(bar.downloaded, 25)
+        XCTAssertLessThan(bar.downloaded, 45)
+        XCTAssertGreaterThan(MacOSMediaBuilder.Bar.finished - bar.erased, 45, "the write owns less than half the bar")
+    }
+
+    // Expanding a package is minutes of local disk: some of the bar, not a third.
+    func testAPackageOnDiskOnlyPaysForExpandingIt() {
+        let onDisk = bar(.package(URL(fileURLWithPath: "/tmp/InstallAssistant.pkg")))
+
+        XCTAssertEqual(onDisk.downloaded, MacOSMediaBuilder.Bar.checked)
+        XCTAssertGreaterThan(onDisk.prepared, MacOSMediaBuilder.Bar.checked)
+        XCTAssertLessThan(onDisk.prepared, bar(catalog).prepared)
+    }
+
+    // Whatever the run, the bar only ever moves forward through these points.
+    func testEveryRunsBarIsInOrder() {
+        let origins: [MacOSInstaller.Origin] = [
+            catalog,
+            .softwareUpdate,
+            .package(URL(fileURLWithPath: "/tmp/InstallAssistant.pkg")),
+            .application(URL(fileURLWithPath: "/Applications/Install macOS Sequoia.app"))
+        ]
+
+        for origin in origins {
+            let points = bar(origin)
+
+            XCTAssertLessThanOrEqual(MacOSMediaBuilder.Bar.checked, points.downloaded, "\(origin)")
+            XCTAssertLessThanOrEqual(points.downloaded, points.prepared, "\(origin)")
+            XCTAssertLessThanOrEqual(points.prepared, points.erased, "\(origin)")
+            XCTAssertLessThan(points.erased, MacOSMediaBuilder.Bar.finished, "\(origin)")
+        }
+    }
+}

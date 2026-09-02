@@ -135,6 +135,11 @@ Advanced Options can delete it once the drive is written.
 The download is checked against the byte count Apple publishes and discarded if it disagrees, so a truncated
 transfer fails before the drive is touched rather than after.
 
+How the progress bar is divided depends on what the run has to do. An installer already in `/Applications` is
+written straight to the drive, so the write owns almost all of the bar; one downloaded from Apple shares it
+with the download and with expanding the package. A run never spends part of the bar on a step it is not
+taking.
+
 Writing the drive is most of a run - 15 GB onto a USB stick - and `createinstallmedia` prints nothing at all
 while it copies. The privileged step therefore samples the kernel's I/O counter for the device every ten
 seconds, and that is what moves the second half of the progress bar. It is read from the counter rather than
