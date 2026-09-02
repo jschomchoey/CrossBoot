@@ -192,6 +192,13 @@ extension CrossBootViewModel {
             return
         }
 
+        // Asked once the erase has been confirmed, and held no longer than the
+        // call that hands it to sudo.
+        guard let password = PasswordPanel.ask(toErase: drive) else {
+            processState = ProcessState()
+            return
+        }
+
         do {
             try await powerAssertion.createAssertion(reason: "Creating a macOS installer drive")
         } catch {
@@ -204,7 +211,12 @@ extension CrossBootViewModel {
         }
 
         do {
-            try await builder.build(plan, onto: drive, removingInstaller: removesPreparedInstaller)
+            try await builder.build(
+                plan,
+                onto: drive,
+                removingInstaller: removesPreparedInstaller,
+                password: password
+            )
 
             showAlert(
                 title: "Success",
@@ -233,7 +245,6 @@ extension CrossBootViewModel {
 
         switch error as? PrivilegedError {
         case .accessRefused: pane = SettingsPane.openFullDiskAccess
-        case .terminalRefused: pane = SettingsPane.openAutomation
         default: pane = nil
         }
 

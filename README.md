@@ -102,27 +102,27 @@ before anything is erased:
 
 Versions this Mac cannot build are hidden until you ask for them in the menu beside **macOS Version**.
 
-### Full Disk Access, and why the drive is written in Terminal
+### Full Disk Access
 
 `createinstallmedia`'s last step - making the drive bootable - is refused by macOS unless the process doing it
-has Full Disk Access, and an app cannot lend its own to a root process it raises: every form of *"do shell
-script with administrator privileges"* goes through the authorization trampoline, which does not carry the
-grant. The drive gets written and then cannot be blessed.
+has Full Disk Access, and an app cannot lend its own to a root process raised the usual way: every form of
+*"do shell script with administrator privileges"* goes through the authorization trampoline, which does not
+carry the grant. The drive gets written and then cannot be blessed.
 
-So CrossBoot does not run that step itself. It hands one `sudo` command line to **Terminal**, which is an app
-you can grant Full Disk Access to once, and follows the run from the log the step writes. Switch Terminal on
-under **System Settings > Privacy & Security > Full Disk Access**, quit Terminal, and run again; the first run
-also asks to control Terminal, under Privacy & Security > Automation.
+So CrossBoot asks for your administrator password itself and hands it to `sudo` on its standard input. The step
+is then a direct child of the app and inherits what the app holds. Switch **CrossBoot** on under
+**System Settings > Privacy & Security > Full Disk Access**, reopen it, and run.
 
-The step checks for that access itself, before the drive is erased, so a refusal costs you nothing.
+The password goes from the panel into sudo and nowhere else: never an argument, never an environment variable,
+never a file, never a log. The step also checks for that access itself, before the drive is erased, so a
+refusal costs you nothing.
 
 ### What it does to your Mac
 
-Writing macOS media needs `createinstallmedia`, which needs root, so `sudo` asks for your administrator
-password once per run - in the Terminal window CrossBoot opens, when you press the button rather than an hour
-later. The privileged step waits there for the download to finish, so nothing interrupts a run halfway
-through. It is a single step, and nothing you chose is ever spliced into a command: every value is quoted onto
-the command line the way the shell reads it back verbatim, which the tests check by running a shell.
+Writing macOS media needs `createinstallmedia`, which needs root, so CrossBoot asks for your administrator
+password once per run - when you press the button, not an hour later. The privileged step then waits for the
+download to finish, so nothing interrupts a run halfway through. It is a single step, and nothing you chose is
+ever spliced into a command: every path is one item of the step's argv.
 
 The drive is checked twice: once before the password prompt, and again as root immediately before the erase,
 because downloading an installer can take an hour and a drive can be swapped in that time. It has to still be

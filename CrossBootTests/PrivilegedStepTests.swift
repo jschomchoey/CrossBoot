@@ -78,56 +78,12 @@ final class PrivilegedStepTests: XCTestCase {
         XCTAssertEqual(arguments.filter { $0 == hostile }.count, 1)
     }
 
-    // The step is handed to Terminal as one command line, so every value has to
-    // survive a shell that would otherwise read it as code. This runs that shell.
-    func testHostileValuesSurviveTheCommandLineTheyAreQuotedOnto() throws {
-        let hostile = [
-            "a\"b $(id) `id` ; rm -rf /",
-            "it's a drive",
-            "line\nbreak",
-            "$HOME/../etc",
-            "*"
-        ]
+    // Every value reaches the step as one item of the child's argv, so there is
+    // no command line for a volume name to break out of.
+    func testTheStepIsRunFromArgumentsRatherThanACommandLine() {
+        let hostile = "a\"b $(id) `id` ; rm -rf /"
 
-        let echoed = try echo(hostile)
-
-        XCTAssertEqual(echoed, hostile)
-    }
-
-    // Runs `/bin/sh -c` on the quoted arguments and reads back what the shell
-    // made of them.
-    private func echo(_ values: [String]) throws -> [String] {
-        let quoted = values.map(PrivilegedRunner.shellQuoted).joined(separator: " ")
-
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/sh")
-        // NUL-separated, because an argument may contain anything else.
-        process.arguments = ["-c", "printf '%s\\0' \(quoted)"]
-
-        let output = Pipe()
-        process.standardOutput = output
-
-        try process.run()
-        let data = output.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-
-        return String(decoding: data, as: UTF8.self)
-            .split(separator: "\0", omittingEmptySubsequences: true)
-            .map(String.init)
-    }
-
-    // The app never sees the step run: it hands Terminal a command line and then
-    // waits for the status that command leaves behind.
-    func testTheCommandSudoesTheStepAndLeavesItsStatusBehind() {
-        let command = PrivilegedRunner.command(
-            argv(request(volume: "it's a drive")),
-            status: URL(fileURLWithPath: "/tmp/work/status")
-        )
-
-        XCTAssertTrue(command.contains("/usr/bin/sudo -- '/tmp/work/run.sh'"), command)
-        XCTAssertTrue(command.hasSuffix("; echo $? > '/tmp/work/status'"), command)
-        // Quoted, not dropped: the volume name reaches the step as it was typed.
-        XCTAssertTrue(command.contains(#"'it'\''s a drive'"#), command)
+        XCTAssertEqual(argv(request(volume: hostile)).filter { $0 == hostile }.count, 1)
     }
 
     // MARK: - The script itself

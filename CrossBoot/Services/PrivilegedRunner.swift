@@ -1,32 +1,32 @@
 import Foundation
-import CoreServices
 
 // Runs the one part of a macOS run that needs root: Apple's createinstallmedia,
 // and the installer step that has to precede it.
 //
-// The step runs in Terminal, under sudo, and this app only starts it and reads
-// what it writes.
+// Runs the one part of a macOS run that needs root: Apple's createinstallmedia,
+// and the installer step that has to precede it.
 //
-// createinstallmedia's last step - blessing the drive - is refused by TCC unless
-// the process doing it has Full Disk Access, and macOS does not let an app's own
-// grant reach a root process raised through the authorization trampoline. That
-// is every form of `do shell script with administrator privileges`, whoever
-// raises it: the drive is written and then cannot be made bootable. A command
-// sudo'd inside Terminal is Terminal's own child, and Terminal is an app the
-// user can grant that access to once.
+// The password is asked for by this app and handed to `sudo` on its standard
+// input, which makes the step a direct child of CrossBoot. That is the whole
+// reason for doing it this way: createinstallmedia's last step - blessing the
+// drive - is refused by TCC unless the process doing it has Full Disk Access,
+// and macOS does not pass an app's grant to a root process raised through the
+// authorization trampoline, which is what every form of `do shell script with
+// administrator privileges` uses. A sudo'd child inherits it; a trampolined one
+// does not, and the drive gets written and then cannot be made bootable.
+//
+// The password is never written down: it goes from the panel into sudo's stdin
+// and is dropped. It is never an argument, never an environment variable, never
+// a file, and never logged.
 //
 // The step checks for that access itself, before anything is erased, so a drive
 // is never wiped for a run that could not have finished.
 //
-// The prompt is raised when the run starts, not when the drive is written: the
-// step parks itself on a sentinel file and the app lets it go once the installer
-// has been downloaded. Otherwise the password is asked for an hour into a run
-// nobody is sitting in front of any more.
-//
-// Nothing the user chose is ever spliced into script text. Paths reach
-// AppleScript as `on run argv` items and are wrapped in `quoted form of` at its
-// runtime, so a volume called `a"b $(rm -rf ~)` is passed through verbatim - the
-// same guarantee ShellHelper gives the unprivileged commands.
+// Nothing the user chose is ever spliced into script text either: every path is
+// one item of the child's argv, so a volume called `a"b $(rm -rf ~)` is passed
+// through verbatim - the same guarantee ShellHelper gives the unprivileged
+// commands.
+
 actor PrivilegedRunner {
     static let shared = PrivilegedRunner()
 
@@ -79,6 +79,7 @@ actor PrivilegedRunner {
     // wait for, and re-reading a log of a few kilobytes costs nothing.
     func createInstallMedia(
         _ request: Request,
+        password: String,
         preparing: @escaping @Sendable () async throws -> Void,
         onOutput: @escaping @Sendable @MainActor (String) -> Void
     ) async throws {
@@ -90,7 +91,6 @@ actor PrivilegedRunner {
         let cancelURL = workDirectory.appendingPathComponent("cancel")
         let readyURL = workDirectory.appendingPathComponent("ready")
         let heartbeatURL = workDirectory.appendingPathComponent("heartbeat")
-        let statusURL = workDirectory.appendingPathComponent("status")
 
         try Self.script.write(to: scriptURL, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: scriptURL.path)
@@ -117,7 +117,7 @@ actor PrivilegedRunner {
             try await withThrowingTaskGroup(of: Void.self) { group in
                 group.addTask {
                     try await withTaskCancellationHandler {
-                        try await Self.runInTerminal(arguments, status: statusURL)
+                        try await Self.runAsRoot(arguments, password: password)
                     } onCancel: {
                         // The privileged step runs as root and cannot be
                         // signalled from here, so it polls for this file and
@@ -201,6 +201,8 @@ actor PrivilegedRunner {
 
     // MARK: - Elevation
 
+    private static let sudo = "/usr/bin/sudo"
+
     // TCC's own database: nothing short of Full Disk Access reads it, so asking
     // whether the step can is the same question as asking whether it will be
     // allowed to finish. Passed in rather than hard-coded in the script so the
@@ -210,102 +212,56 @@ actor PrivilegedRunner {
     // What the step exits with when that access is missing.
     static let accessDenied = 77
 
-    // NSAppleScript is not thread-safe; one queue owns every use of it.
-    private static let scripting = DispatchQueue(label: "com.crossboot.privileged-step")
+    // Runs the step as root and waits for it. The password reaches sudo through
+    // a pipe and nothing else; -S reads it from there, and -p '' keeps sudo from
+    // writing a prompt nobody would see.
+    private static func runAsRoot(_ argv: [String], password: String) async throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: sudo)
+        process.arguments = ["-S", "-p", "", "--"] + argv
 
-    // Starts the step in Terminal and waits for the status it leaves behind.
-    // `do script` returns as soon as Terminal has the command, so the run is
-    // followed through the files it writes, the same way its progress is.
-    private static func runInTerminal(_ argv: [String], status statusURL: URL) async throws {
-        try await tell(Self.terminalScript, [command(argv, status: statusURL)])
+        let input = Pipe()
+        let output = Pipe()
+        process.standardInput = input
+        process.standardOutput = output
+        process.standardError = output
 
-        // The window has served its purpose once the step has a status, whatever
-        // that status is.
-        defer { Task { try? await tell(Self.closeScript, []) } }
-
-        while !Task.isCancelled {
-            if let status = Int(
-                (try? String(contentsOf: statusURL, encoding: .utf8))?
-                    .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            ) {
-                guard status == 0 else { throw StepFailed(status: status) }
-                return
-            }
-
-            try await Task.sleep(nanoseconds: pollInterval)
-        }
-
-        throw CancellationError()
-    }
-
-    // One command line for Terminal: sudo, the script, its arguments, and the
-    // status the app is waiting for. Every value is quoted the way `quoted form
-    // of` quoted it before, so nothing a user chose can become code.
-    static func command(_ argv: [String], status statusURL: URL) -> String {
-        let step = argv.map(shellQuoted).joined(separator: " ")
-
-        return "clear; /usr/bin/sudo -- \(step); echo $? > \(shellQuoted(statusURL.path))"
-    }
-
-    // POSIX quoting: everything inside single quotes is literal, and the only
-    // character that cannot appear there is the single quote itself.
-    static func shellQuoted(_ value: String) -> String {
-        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
-    }
-
-    private static func tell(_ source: String, _ argv: [String]) async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            scripting.async {
-                guard let script = NSAppleScript(source: source) else {
-                    continuation.resume(throwing: PrivilegedError.stepFailed("The privileged step could not be compiled."))
+            process.terminationHandler = { finished in
+                let status = Int(finished.terminationStatus)
+
+                guard status == 0 else {
+                    continuation.resume(throwing: StepFailed(status: status))
                     return
                 }
 
-                var failure: NSDictionary?
-                script.executeAppleEvent(runEvent(argv), error: &failure)
+                continuation.resume()
+            }
 
-                guard let failure else {
-                    continuation.resume()
-                    return
+            do {
+                try process.run()
+
+                // The step writes to its log rather than to us, so the pipe only
+                // has to be drained to keep the child from blocking on a full
+                // one. Empty data is the end of it, and a handler left in place
+                // after that spins.
+                output.fileHandleForReading.readabilityHandler = { handle in
+                    if handle.availableData.isEmpty { handle.readabilityHandler = nil }
                 }
 
-                continuation.resume(throwing: ScriptFailure(
-                    number: failure[NSAppleScript.errorNumber] as? Int ?? 0,
-                    message: failure[NSAppleScript.errorMessage] as? String ?? ""
-                ))
+                var line = Data((password + "\n").utf8)
+                try input.fileHandleForWriting.write(contentsOf: line)
+                try input.fileHandleForWriting.close()
+                line.resetBytes(in: 0..<line.count)
+            } catch {
+                continuation.resume(throwing: error)
             }
         }
     }
 
-    // `on run argv` is reached by sending the script the event AppleScript would
-    // have sent it, with the arguments as the event's direct object.
-    private static func runEvent(_ argv: [String]) -> NSAppleEventDescriptor {
-        let arguments = NSAppleEventDescriptor.list()
-        for (index, value) in argv.enumerated() {
-            arguments.insert(NSAppleEventDescriptor(string: value), at: index + 1)
-        }
-
-        let event = NSAppleEventDescriptor(
-            eventClass: AEEventClass(kCoreEventClass),
-            eventID: AEEventID(kAEOpenApplication),
-            targetDescriptor: NSAppleEventDescriptor(processIdentifier: ProcessInfo.processInfo.processIdentifier),
-            returnID: AEReturnID(kAutoGenerateReturnID),
-            transactionID: AETransactionID(kAnyTransactionID)
-        )
-        event.setParam(arguments, forKeyword: AEKeyword(keyDirectObject))
-
-        return event
-    }
-
-    // What the step exited with, once Terminal had run it.
+    // What the step exited with.
     private struct StepFailed: Error {
         let status: Int
-    }
-
-    // What AppleScript itself reported, when the command never got that far.
-    private struct ScriptFailure: Error {
-        let number: Int
-        let message: String
     }
 
     // MARK: - Scratch
@@ -366,7 +322,6 @@ actor PrivilegedRunner {
     private static func failure(_ error: Error, log logURL: URL) -> Error {
         let text = (try? String(contentsOf: logURL, encoding: .utf8)) ?? ""
         let step = error as? StepFailed
-        let script = error as? ScriptFailure
 
         // The step said so itself, before erasing anything - or createinstallmedia
         // ran into it at the end, which is what TCC does to a bless.
@@ -376,19 +331,13 @@ actor PrivilegedRunner {
             return PrivilegedError.accessRefused
         }
 
-        // Terminal is what runs the step, and being allowed to drive it is a
-        // permission of its own.
-        if script?.number == -1743 || script?.number == -600 {
-            return PrivilegedError.terminalRefused
-        }
-
-        // A dismissed prompt is -128; sudo that never ran the step leaves an
-        // empty log behind. Neither is something that went wrong.
-        if script?.number == -128 || (step?.status == 1 && text.isEmpty) {
+        // sudo refused before the step wrote anything at all: the password was
+        // not accepted.
+        if step?.status == 1, text.isEmpty {
             return PrivilegedError.authorizationRefused
         }
 
-        let reported = script?.message ?? error.localizedDescription
+        let reported = error.localizedDescription
 
         let detail = text
             .components(separatedBy: .newlines)
@@ -401,33 +350,6 @@ actor PrivilegedRunner {
     }
 
     // MARK: - Scripts
-
-    // Hands one command line to Terminal and leaves it there. The window is
-    // titled so the user knows which one is asking for their password, and so
-    // the app can close it again when the step is over.
-    private static let terminalScript = #"""
-    on run argv
-        tell application "Terminal"
-            activate
-            set theTab to do script (item 1 of argv)
-            set custom title of theTab to "CrossBoot"
-        end tell
-    end run
-    """#
-
-    // Closes the window the step ran in. Best effort: a window the user closed
-    // themselves, or kept, is not worth reporting.
-    private static let closeScript = #"""
-    on run argv
-        tell application "Terminal"
-            repeat with theWindow in windows
-                try
-                    if custom title of selected tab of theWindow is "CrossBoot" then close theWindow
-                end try
-            end repeat
-        end tell
-    end run
-    """#
 
     // The privileged step itself. Values arrive as shell variables and are only
     // ever expanded as arguments, never concatenated into commands.
@@ -591,27 +513,19 @@ actor PrivilegedRunner {
 enum PrivilegedError: LocalizedError, Equatable {
     case authorizationRefused
     case accessRefused
-    case terminalRefused
     case stepFailed(String)
 
     var errorDescription: String? {
         switch self {
         case .authorizationRefused:
-            return "Writing a macOS installer needs an administrator password. Nothing was erased."
+            return "That password was not accepted, so nothing was erased."
         case .accessRefused:
             return """
-            Terminal needs Full Disk Access to make the drive bootable, and macOS does not let \
-            CrossBoot lend it its own.
+            CrossBoot needs Full Disk Access to make the drive bootable: macOS refuses that last \
+            step without it.
 
-            Switch Terminal on in System Settings > Privacy & Security > Full Disk Access, quit \
-            Terminal, and run again. Nothing was erased.
-            """
-        case .terminalRefused:
-            return """
-            CrossBoot writes the drive through Terminal and was not allowed to open it.
-
-            Switch Terminal on for CrossBoot in System Settings > Privacy & Security > Automation, \
-            and run again. Nothing was erased.
+            Switch CrossBoot on in System Settings > Privacy & Security > Full Disk Access, reopen \
+            the app, and run again. Nothing was erased.
             """
         case .stepFailed(let detail):
             return detail

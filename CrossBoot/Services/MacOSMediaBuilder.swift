@@ -33,7 +33,12 @@ final class MacOSMediaBuilder {
         self.onUpdate = onUpdate
     }
 
-    func build(_ plan: MacOSMediaPlan, onto drive: Drive, removingInstaller: Bool) async throws {
+    func build(
+        _ plan: MacOSMediaPlan,
+        onto drive: Drive,
+        removingInstaller: Bool,
+        password: String
+    ) async throws {
         // Checked before anything is downloaded or erased.
         guard drive.size >= plan.estimatedDriveBytes else {
             throw DiskError.insufficientSpace(required: plan.estimatedDriveBytes, available: drive.size)
@@ -65,7 +70,7 @@ final class MacOSMediaBuilder {
             removesPreparedInstaller: removingInstaller
         )
 
-        try await privileged.createInstallMedia(request) { [weak self] in
+        try await privileged.createInstallMedia(request, password: password) { [weak self] in
             guard let self else { return }
 
             // The installer is obtained before the drive is touched. A download
