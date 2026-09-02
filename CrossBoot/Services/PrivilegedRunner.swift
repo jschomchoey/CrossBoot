@@ -495,13 +495,22 @@ actor PrivilegedRunner {
     done
 
     # createinstallmedia says nothing at all while it copies 15 GB onto a stick
-    # that may take half an hour, so the step reports what has landed there. The
-    # volume is renamed part-way through; the device it sits on is not.
+    # that may take half an hour, so the step reports how much has reached the
+    # drive. It asks the kernel's own counter for the device rather than the
+    # filesystem: anything that touches a volume being written this hard - even
+    # opening it in the Finder - stalls for ten seconds or more, and a progress
+    # bar must not be one of the things making that worse. The volume is renamed
+    # part-way through; the device it sits on is not.
     sample_drive() {
+        name=${DEVICE##*/}
+        base=$(/usr/sbin/iostat -Id "$name" 2>/dev/null | /usr/bin/awk 'END { print $NF + 0 }')
+
         while :; do
-            used=$(/bin/df -k 2>/dev/null | /usr/bin/awk -v device="$DEVICE" '$1 ~ "^" device "s" { print $3; exit }')
-            [ -n "$used" ] && echo "CrossBoot: copied $used"
-            sleep 5
+            sleep 10
+
+            copied=$(/usr/sbin/iostat -Id "$name" 2>/dev/null                 | /usr/bin/awk -v base="$base" 'END { printf "%d", ($NF - base) * 1024 }')
+
+            [ -n "$copied" ] && [ "$copied" -gt 0 ] 2>/dev/null && echo "CrossBoot: copied $copied"
         done
     }
 

@@ -136,8 +136,10 @@ The download is checked against the byte count Apple publishes and discarded if 
 transfer fails before the drive is touched rather than after.
 
 Writing the drive is most of a run - 15 GB onto a USB stick - and `createinstallmedia` prints nothing at all
-while it copies. The privileged step therefore samples the drive itself every few seconds, and that is what
-moves the second half of the progress bar.
+while it copies. The privileged step therefore samples the kernel's I/O counter for the device every ten
+seconds, and that is what moves the second half of the progress bar. It is read from the counter rather than
+from the volume because anything that touches a drive being written this hard stalls for seconds, and a
+progress bar must not be one of the things making that worse.
 
 ## Development
 

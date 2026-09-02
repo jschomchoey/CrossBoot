@@ -131,6 +131,26 @@ final class PrivilegedStepTests: XCTestCase {
         XCTAssertFalse(script.contains("MS-DOS"))
     }
 
+    // Anything that touches a volume while 15 GB is being written to it stalls
+    // for ten seconds or more - opening it in the Finder does - so the samples
+    // that move the progress bar come from the kernel's counter for the device,
+    // not from the filesystem.
+    func testTheDriveIsSampledWithoutTouchingIt() {
+        let script = PrivilegedRunner.script
+
+        XCTAssertTrue(script.contains("/usr/sbin/iostat -Id"))
+        XCTAssertFalse(script.contains("df -k"), "sampling must not go through the filesystem")
+    }
+
+    // The sampler runs in the background, and a stop leaves the shell without
+    // waiting for it: unstopped, it would loop as root for as long as the Mac
+    // stayed on.
+    func testTheSamplerIsStoppedHoweverTheStepEnds() {
+        XCTAssertTrue(PrivilegedRunner.script.contains("""
+        trap 'kill "$sampler" 2>/dev/null' EXIT
+        """))
+    }
+
     // MARK: - Waiting for the download
 
     // The password is asked for when the run starts, so the step parks itself
