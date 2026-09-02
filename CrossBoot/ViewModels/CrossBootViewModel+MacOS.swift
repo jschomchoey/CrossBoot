@@ -20,6 +20,12 @@ extension CrossBootViewModel {
         isLoadingVersions = true
         defer { isLoadingVersions = false }
 
+        // Asked for its side effect, once macOS media is what the user is here
+        // for: being refused is what puts CrossBoot into the Full Disk Access
+        // list, and that list is where they have to switch it on. The answer
+        // itself is what matters when a run starts.
+        _ = FullDiskAccess.isGranted
+
         let catalog = Task { try await SoftwareCatalog.shared.installers(refresh: refresh) }
         let offered = Task { try await InstallerSource.softwareUpdateInstallers() }
         // Reading a bundle walks it for its size, which is not the main thread's
@@ -164,6 +170,32 @@ extension CrossBootViewModel {
 
     // MARK: - Run
 
+    // The privileged step inherits this app's Full Disk Access, and without it
+    // createinstallmedia is refused its last step - after the download, and
+    // after the drive has been erased. That is far too late to find out, so it
+    // is settled before anything starts.
+    func confirmAccess() -> Bool {
+        guard mediaKind == .macOS, !FullDiskAccess.isGranted else { return true }
+
+        let alert = NSAlert()
+        alert.messageText = "CrossBoot needs Full Disk Access"
+        alert.informativeText = """
+        macOS refuses the last step of writing a macOS installer - making the drive bootable - \
+        without it.
+
+        Switch CrossBoot on in Privacy & Security > Full Disk Access, then quit and reopen it.
+        """
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Open Settings")
+        alert.addButton(withTitle: "Cancel")
+
+        if alert.runModal() == .alertFirstButtonReturn {
+            FullDiskAccess.openSettings()
+        }
+
+        return false
+    }
+
     // Without Full Disk Access, createinstallmedia is refused its last step -
     // after the download, and after the drive has been erased and written. That
     // is far too late to find out, so it is asked for before anything starts.
@@ -244,7 +276,7 @@ extension CrossBootViewModel {
         let pane: (() -> Void)?
 
         switch error as? PrivilegedError {
-        case .accessRefused: pane = SettingsPane.openFullDiskAccess
+        case .accessRefused: pane = FullDiskAccess.openSettings
         default: pane = nil
         }
 

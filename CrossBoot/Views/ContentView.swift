@@ -338,6 +338,10 @@ struct ContentView: View {
             .disabled(!viewModel.processState.isCancellable)
         } else {
             Button {
+                // Asked before the erase is confirmed: a run macOS would refuse
+                // at the end must not get as far as wiping the drive.
+                guard viewModel.confirmAccess() else { return }
+
                 if viewModel.confirmErase() {
                     viewModel.createBootableUSB()
                 }

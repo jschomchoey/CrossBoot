@@ -111,7 +111,8 @@ carry the grant. The drive gets written and then cannot be blessed.
 
 So CrossBoot asks for your administrator password itself and hands it to `sudo` on its standard input. The step
 is then a direct child of the app and inherits what the app holds. Switch **CrossBoot** on under
-**System Settings > Privacy & Security > Full Disk Access**, reopen it, and run.
+**System Settings > Privacy & Security > Full Disk Access**, reopen it, and run. CrossBoot appears in that list
+after it has been refused once, which it asks for itself when you switch to macOS media.
 
 The password goes from the panel into sudo and nowhere else: never an argument, never an environment variable,
 never a file, never a log. The step also checks for that access itself, before the drive is erased, so a

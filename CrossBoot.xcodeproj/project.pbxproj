@@ -50,7 +50,7 @@
 		056 /* CreateInstallMediaOutputTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 156 /* CreateInstallMediaOutputTests.swift */; };
 		058 /* TransferRate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 158 /* TransferRate.swift */; };
 		059 /* TransferRateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 159 /* TransferRateTests.swift */; };
-		060 /* SettingsPane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 160 /* SettingsPane.swift */; };
+		060 /* FullDiskAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = 160 /* FullDiskAccess.swift */; };
 		063 /* PasswordPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 163 /* PasswordPanel.swift */; };
 		061 /* MacOSVersionListTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 161 /* MacOSVersionListTests.swift */; };
 		062 /* DiskImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 162 /* DiskImage.swift */; };
@@ -116,7 +116,7 @@
 		156 /* CreateInstallMediaOutputTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateInstallMediaOutputTests.swift; sourceTree = "<group>"; };
 		158 /* TransferRate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferRate.swift; sourceTree = "<group>"; };
 		159 /* TransferRateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransferRateTests.swift; sourceTree = "<group>"; };
-		160 /* SettingsPane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsPane.swift; sourceTree = "<group>"; };
+		160 /* FullDiskAccess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullDiskAccess.swift; sourceTree = "<group>"; };
 		163 /* PasswordPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasswordPanel.swift; sourceTree = "<group>"; };
 		161 /* MacOSVersionListTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacOSVersionListTests.swift; sourceTree = "<group>"; };
 		162 /* DiskImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiskImage.swift; sourceTree = "<group>"; };
@@ -206,7 +206,7 @@
 				136 /* MediaBuilder.swift */,
 				132 /* WimXMLParser.swift */,
 				144 /* PrivilegedRunner.swift */,
-				160 /* SettingsPane.swift */,
+				160 /* FullDiskAccess.swift */,
 				162 /* DiskImage.swift */,
 				145 /* SoftwareCatalog.swift */,
 				146 /* DistributionParser.swift */,
@@ -398,7 +398,7 @@
 				051 /* MacOSVersionPicker.swift in Sources */,
 				052 /* CrossBootViewModel+MacOS.swift in Sources */,
 				058 /* TransferRate.swift in Sources */,
-				060 /* SettingsPane.swift in Sources */,
+				060 /* FullDiskAccess.swift in Sources */,
 				063 /* PasswordPanel.swift in Sources */,
 				062 /* DiskImage.swift in Sources */,
 			);
