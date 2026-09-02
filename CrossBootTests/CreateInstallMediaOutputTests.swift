@@ -94,33 +94,63 @@ final class CreateInstallMediaOutputTests: XCTestCase {
         let stalled = """
         CrossBoot: writing
         Erasing disk: 0%... 100%
-        Copying essential files...
         CrossBoot: copied 1000000
-        Copying the macOS RecoveryOS...
+        Copying to disk: 0%... 80%...
         """
 
         let report = try XCTUnwrap(CreateInstallMediaOutput.read(stalled, expecting: installer))
 
-        // The samples stopped at a fifteenth of the installer; the tool's own
-        // last line says the copy is nearly done.
-        XCTAssertEqual(report.fraction, 0.9, accuracy: 0.001)
+        // The samples stopped at a fifteenth of the installer; the release's
+        // own percentage is four fifths of the way through the copy.
+        XCTAssertEqual(report.fraction, 0.78, accuracy: 0.001)
     }
 
-    // A run of a release that prints nothing but these lines still moves.
-    func testTheToolsOwnLinesMoveTheBarOnTheirOwn() throws {
-        let steps = [
-            "CrossBoot: writing\nErasing disk: 0%... 100%",
-            "CrossBoot: writing\nErasing disk: 100%\nCopying essential files...",
-            "CrossBoot: writing\nCopying essential files...\nCopying the macOS RecoveryOS...",
-            "CrossBoot: writing\nCopying the macOS RecoveryOS...\nMaking disk bootable..."
-        ]
+    // The lines current releases print on the way into the copy are printed
+    // before it, "Making disk bootable" included: the drive is written after
+    // that line, not before it. Reading it as the end held the bar at 97% for
+    // the half hour the write took.
+    func testALinePrintedBeforeTheCopyDoesNotStandForTheEndOfOne() throws {
+        let installer: Int64 = 15_000_000_000
+        let started = """
+        CrossBoot: writing
+        Erasing disk: 0%... 100%
+        Copying essential files...
+        Making disk bootable...
+        """
 
-        var previous = -1.0
-        for step in steps {
-            let report = try XCTUnwrap(CreateInstallMediaOutput.read(step))
-            XCTAssertGreaterThan(report.fraction, previous, "did not move at: \(step)")
+        let begun = try XCTUnwrap(CreateInstallMediaOutput.read(started, expecting: installer))
+        XCTAssertEqual(begun.fraction, 0.15, accuracy: 0.001)
+
+        // And from there the samples off the drive are what move it, all the
+        // way to the end of the copy.
+        var previous = begun.fraction
+        for copiedKB in [3_000_000, 6_000_000, 10_000_000, 13_000_000] {
+            let report = try XCTUnwrap(CreateInstallMediaOutput.read(
+                started + "\nCrossBoot: copied \(copiedKB)", expecting: installer
+            ))
+
+            XCTAssertGreaterThan(report.fraction, previous, "did not move at \(copiedKB) KB")
             previous = report.fraction
         }
+
+        XCTAssertGreaterThan(previous, 0.85)
+    }
+
+    // A run of a release that prints nothing but these lines still leaves the
+    // floor when the copy starts, and only its last line finishes the bar.
+    func testTheToolsOwnLinesMoveTheBarOffTheErase() throws {
+        let erased = try XCTUnwrap(CreateInstallMediaOutput.read(
+            "CrossBoot: writing\nErasing disk: 0%... 100%"
+        ))
+        let copying = try XCTUnwrap(CreateInstallMediaOutput.read(
+            "CrossBoot: writing\nErasing disk: 100%\nCopying essential files..."
+        ))
+        let available = try XCTUnwrap(CreateInstallMediaOutput.read(
+            "CrossBoot: writing\nMaking disk bootable...\nInstall media now available at \"/Volumes/X\""
+        ))
+
+        XCTAssertGreaterThan(copying.fraction, erased.fraction)
+        XCTAssertEqual(available.fraction, 1)
     }
 
     func testTheLastSampleIsTheOneRead() {

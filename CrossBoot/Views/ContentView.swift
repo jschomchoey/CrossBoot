@@ -115,7 +115,12 @@ struct ContentView: View {
     private var mediaKind: Binding<MediaKind> {
         Binding(
             get: { viewModel.mediaKind },
-            set: { viewModel.select($0) }
+            // The segmented control writes its selection back while the view is
+            // still updating, and publishing from there is undefined behaviour.
+            // Landing the switch on the next turn keeps it out of that pass.
+            set: { kind in
+                Task { @MainActor in viewModel.select(kind) }
+            }
         )
     }
 

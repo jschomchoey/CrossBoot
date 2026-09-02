@@ -61,8 +61,9 @@ enum CreateInstallMediaOutput {
 
         let tail = String(output[start.upperBound...])
 
+        // The only line that means the drive is finished with. Every other line
+        // the tool prints is written before it stops writing to the drive.
         if tail.contains("Install media now available") { return 1 }
-        if tail.contains("Making disk bootable") { return 0.97 }
 
         // Whichever source has got furthest is the one to believe. They measure
         // the same copy by different means, any of them can stall - a counter
@@ -83,13 +84,14 @@ enum CreateInstallMediaOutput {
             fraction = max(fraction, 0.1 + lastPercent(in: String(tail[copying.upperBound...])) / 100 * 0.85)
         }
 
-        // Current releases print only these two while they copy, in this order,
-        // and each still says how far along it is.
-        if tail.contains("Copying the macOS RecoveryOS") {
-            fraction = max(fraction, 0.9)
-        } else if tail.contains("Copying essential files") {
-            // The start of the long copy, and above anything the erase can
-            // report, so the bar moves when the copy begins.
+        // Current releases print these three and then copy for half an hour
+        // without printing anything else, so each of them says the copy has
+        // begun and nothing more - "Making disk bootable" least of all, which
+        // on those releases is written before the drive is written. Reading it
+        // as the end of the copy is what held the bar at 97% for the whole of
+        // it. Where a release prints a figure, that figure is already above
+        // this and wins.
+        if copyStarted.contains(where: tail.contains) {
             fraction = max(fraction, 0.15)
         }
 
@@ -100,6 +102,14 @@ enum CreateInstallMediaOutput {
 
         return fraction
     }
+
+    // Lines the tool prints on the way into the copy, in the order it prints
+    // them. None of them is a measure of one.
+    private static let copyStarted = [
+        "Copying essential files",
+        "Copying the macOS RecoveryOS",
+        "Making disk bootable"
+    ]
 
     // "CrossBoot: copied 1234" - the kilobytes the step last saw on the drive.
     static func lastCopiedBytes(in text: String) -> Int64? {
