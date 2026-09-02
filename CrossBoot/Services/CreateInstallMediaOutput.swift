@@ -64,23 +64,41 @@ enum CreateInstallMediaOutput {
         if tail.contains("Install media now available") { return 1 }
         if tail.contains("Making disk bootable") { return 0.97 }
 
-        // Held short of the end: what is on the drive stops growing before
-        // createinstallmedia is finished with it.
+        // Whichever source has got furthest is the one to believe. They measure
+        // the same copy by different means, any of them can stall - a counter
+        // the drive resets when it is re-partitioned, a release that prints no
+        // percentage at all - so the bar follows the one that still knows
+        // something rather than the first one asked.
+        var fraction = 0.0
+
+        // What has actually reached the drive, which is the only figure that
+        // moves while createinstallmedia copies in silence. Held short of the
+        // end: it stops growing before the tool is finished with the drive.
         if expectedBytes > 0, let copied = lastCopiedBytes(in: tail) {
-            return min(Double(copied) / Double(expectedBytes), 0.95)
+            fraction = max(fraction, min(Double(copied) / Double(expectedBytes), 0.95))
         }
 
         // Releases up to Monterey printed a percentage for the copy.
         if let copying = tail.range(of: "Copying to disk:", options: .backwards) {
-            return 0.1 + lastPercent(in: String(tail[copying.upperBound...])) / 100 * 0.85
+            fraction = max(fraction, 0.1 + lastPercent(in: String(tail[copying.upperBound...])) / 100 * 0.85)
+        }
+
+        // Current releases print only these two while they copy, in this order,
+        // and each still says how far along it is.
+        if tail.contains("Copying the macOS RecoveryOS") {
+            fraction = max(fraction, 0.9)
+        } else if tail.contains("Copying essential files") {
+            // The start of the long copy, and above anything the erase can
+            // report, so the bar moves when the copy begins.
+            fraction = max(fraction, 0.15)
         }
 
         // The tool erases the volume again itself before it copies anything.
         if let erasing = tail.range(of: "Erasing disk:", options: .backwards) {
-            return lastPercent(in: String(tail[erasing.upperBound...])) / 100 * 0.1
+            fraction = max(fraction, lastPercent(in: String(tail[erasing.upperBound...])) / 100 * 0.1)
         }
 
-        return 0
+        return fraction
     }
 
     // "CrossBoot: copied 1234" - the kilobytes the step last saw on the drive.

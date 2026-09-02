@@ -87,6 +87,42 @@ final class CreateInstallMediaOutputTests: XCTestCase {
         XCTAssertEqual(report.fraction, 0.95)
     }
 
+    // Every source of a figure can stall; the bar follows whichever of them has
+    // got furthest, so one going quiet cannot stop it.
+    func testTheFurthestSourceIsTheOneFollowed() throws {
+        let installer: Int64 = 15_000_000_000
+        let stalled = """
+        CrossBoot: writing
+        Erasing disk: 0%... 100%
+        Copying essential files...
+        CrossBoot: copied 1000000
+        Copying the macOS RecoveryOS...
+        """
+
+        let report = try XCTUnwrap(CreateInstallMediaOutput.read(stalled, expecting: installer))
+
+        // The samples stopped at a fifteenth of the installer; the tool's own
+        // last line says the copy is nearly done.
+        XCTAssertEqual(report.fraction, 0.9, accuracy: 0.001)
+    }
+
+    // A run of a release that prints nothing but these lines still moves.
+    func testTheToolsOwnLinesMoveTheBarOnTheirOwn() throws {
+        let steps = [
+            "CrossBoot: writing\nErasing disk: 0%... 100%",
+            "CrossBoot: writing\nErasing disk: 100%\nCopying essential files...",
+            "CrossBoot: writing\nCopying essential files...\nCopying the macOS RecoveryOS...",
+            "CrossBoot: writing\nCopying the macOS RecoveryOS...\nMaking disk bootable..."
+        ]
+
+        var previous = -1.0
+        for step in steps {
+            let report = try XCTUnwrap(CreateInstallMediaOutput.read(step))
+            XCTAssertGreaterThan(report.fraction, previous, "did not move at: \(step)")
+            previous = report.fraction
+        }
+    }
+
     func testTheLastSampleIsTheOneRead() {
         XCTAssertEqual(CreateInstallMediaOutput.lastCopiedBytes(in: "CrossBoot: copied 10\nCrossBoot: copied 20"), 20 * 1024)
         XCTAssertNil(CreateInstallMediaOutput.lastCopiedBytes(in: "Copying essential files..."))

@@ -503,14 +503,26 @@ actor PrivilegedRunner {
     # part-way through; the device it sits on is not.
     sample_drive() {
         name=${DEVICE##*/}
-        base=$(/usr/sbin/iostat -Id "$name" 2>/dev/null | /usr/bin/awk 'END { print $NF + 0 }')
+        previous=""
+        total=0
 
         while :; do
+            now=$(/usr/sbin/iostat -Id "$name" 2>/dev/null | /usr/bin/awk 'END { printf "%d", $NF + 0 }')
+
+            # Counted as the sum of what each round added, never as the distance
+            # from a fixed mark: the drive is re-partitioned in the middle of
+            # this, and a counter that starts again from zero would otherwise
+            # stop the bar for the rest of the run.
+            if [ -n "$now" ] && [ "$now" -ge 0 ] 2>/dev/null; then
+                if [ -n "$previous" ] && [ "$now" -ge "$previous" ]; then
+                    total=$((total + now - previous))
+                fi
+
+                previous=$now
+                echo "CrossBoot: copied $((total * 1024))"
+            fi
+
             sleep 10
-
-            copied=$(/usr/sbin/iostat -Id "$name" 2>/dev/null                 | /usr/bin/awk -v base="$base" 'END { printf "%d", ($NF - base) * 1024 }')
-
-            [ -n "$copied" ] && [ "$copied" -gt 0 ] 2>/dev/null && echo "CrossBoot: copied $copied"
         done
     }
 

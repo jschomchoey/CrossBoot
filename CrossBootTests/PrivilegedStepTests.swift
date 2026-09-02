@@ -142,6 +142,16 @@ final class PrivilegedStepTests: XCTestCase {
         XCTAssertFalse(script.contains("df -k"), "sampling must not go through the filesystem")
     }
 
+    // The drive is re-partitioned while it is being written, and the counter for
+    // it can start again from zero. Summing what each round added survives that;
+    // measuring from a fixed mark would stop the bar for the rest of the run.
+    func testSamplingSurvivesTheCounterStartingAgain() {
+        let script = PrivilegedRunner.script
+
+        XCTAssertTrue(script.contains("total=$((total + now - previous))"))
+        XCTAssertTrue(script.contains(#"[ "$now" -ge "$previous" ]"#))
+    }
+
     // The sampler runs in the background, and a stop leaves the shell without
     // waiting for it: unstopped, it would loop as root for as long as the Mac
     // stayed on.
