@@ -16,8 +16,9 @@ enum CreateInstallMediaOutput {
 
     struct Report: Equatable {
         let phase: Phase
-        // How far the privileged step as a whole has got, 0-100.
-        let progress: Double
+        // How far through that phase, 0 to 1. Only writing reports one: the
+        // others are a step of the run rather than a stretch of it.
+        let fraction: Double
     }
 
     // The markers the privileged script prints between steps.
@@ -29,25 +30,18 @@ enum CreateInstallMediaOutput {
         ("CrossBoot: stopped", .stopped)
     ]
 
-    // Expanding the installer is the long half of the step; the erase is seconds.
-    private static let erasingStart: Double = 40
-    private static let writingStart: Double = 45
-
-    static func read(_ output: String) -> Report? {
+    // `expecting` is how many bytes the installer will put on the drive, which
+    // is what the samples the step writes are measured against.
+    static func read(_ output: String, expecting expectedBytes: Int64 = 0) -> Report? {
         guard let phase = lastPhase(in: output) else { return nil }
 
         switch phase {
-        case .preparing:
-            return Report(phase: phase, progress: 0)
-        case .erasing:
-            return Report(phase: phase, progress: erasingStart)
+        case .preparing, .erasing, .stopped:
+            return Report(phase: phase, fraction: 0)
         case .writing:
-            let share = writingProgress(in: output) / 100
-            return Report(phase: phase, progress: writingStart + share * (100 - writingStart))
+            return Report(phase: phase, fraction: writingFraction(in: output, expecting: expectedBytes))
         case .finished:
-            return Report(phase: phase, progress: 100)
-        case .stopped:
-            return Report(phase: phase, progress: 0)
+            return Report(phase: phase, fraction: 1)
         }
     }
 
@@ -59,24 +53,43 @@ enum CreateInstallMediaOutput {
     }
 
     // createinstallmedia erases the volume it was handed, copies the installer
-    // onto it, then makes it bootable. Copying is nearly all of the time.
-    private static func writingProgress(in output: String) -> Double {
+    // onto it, then makes it bootable. Copying is nearly all of the time - and on
+    // current releases it is also silent, which is why the step samples the drive
+    // itself and why those samples are read first.
+    private static func writingFraction(in output: String, expecting expectedBytes: Int64) -> Double {
         guard let start = output.range(of: "CrossBoot: writing", options: .backwards) else { return 0 }
 
         let tail = String(output[start.upperBound...])
 
-        if tail.contains("Install media now available") { return 100 }
-        if tail.contains("Making disk bootable") { return 95 }
+        if tail.contains("Install media now available") { return 1 }
+        if tail.contains("Making disk bootable") { return 0.97 }
 
-        if let copying = tail.range(of: "Copying to disk:", options: .backwards) {
-            return 10 + lastPercent(in: String(tail[copying.upperBound...])) * 0.85
+        // Held short of the end: what is on the drive stops growing before
+        // createinstallmedia is finished with it.
+        if expectedBytes > 0, let copied = lastCopiedBytes(in: tail) {
+            return min(Double(copied) / Double(expectedBytes), 0.95)
         }
 
+        // Releases up to Monterey printed a percentage for the copy.
+        if let copying = tail.range(of: "Copying to disk:", options: .backwards) {
+            return 0.1 + lastPercent(in: String(tail[copying.upperBound...])) / 100 * 0.85
+        }
+
+        // The tool erases the volume again itself before it copies anything.
         if let erasing = tail.range(of: "Erasing disk:", options: .backwards) {
-            return lastPercent(in: String(tail[erasing.upperBound...])) * 0.1
+            return lastPercent(in: String(tail[erasing.upperBound...])) / 100 * 0.1
         }
 
         return 0
+    }
+
+    // "CrossBoot: copied 1234" - the kilobytes the step last saw on the drive.
+    static func lastCopiedBytes(in text: String) -> Int64? {
+        guard let marker = text.range(of: "CrossBoot: copied ", options: .backwards) else { return nil }
+
+        let digits = text[marker.upperBound...].prefix { $0.isNumber }
+
+        return Int64(digits).map { $0 * 1024 }
     }
 
     // "0%... 10%... 20%" - the figure that counts is the last one written.

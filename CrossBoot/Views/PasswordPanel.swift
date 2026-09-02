@@ -7,7 +7,7 @@ import AppKit
 // PrivilegedRunner for why the usual authorization prompt cannot be used.
 //
 // Nothing here keeps the value: it is read once, the field it came from is
-// cleared, and the caller hands it to sudo's standard input.
+// cleared, and the caller hands it straight to sudo's standard input.
 @MainActor
 enum PasswordPanel {
     static func ask(toErase drive: Drive) -> String? {
@@ -16,8 +16,6 @@ enum PasswordPanel {
         alert.informativeText = """
         Writing a macOS installer runs Apple's createinstallmedia as root, which \
         erases "\(drive.name)".
-
-        Your password goes straight to sudo and is not stored anywhere.
         """
         alert.alertStyle = .informational
 

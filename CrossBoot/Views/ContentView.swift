@@ -371,7 +371,6 @@ struct ContentView: View {
 
         switch viewModel.processState.stage {
         case .error: return .red
-        case .done: return .green
         default: return .secondary
         }
     }

@@ -22,10 +22,17 @@ final class MacOSMediaBuilder {
         didSet { onUpdate(state) }
     }
 
-    // Points on the overall progress bar where each stage hands over to the next.
+    // Where each part of a run sits on the bar.
+    //
+    // Writing the drive is most of the wall clock - 15 GB onto a USB stick, with
+    // no cache left to hide behind - and everything before it happens on this
+    // Mac's own disk. So the write owns the whole second half, whether or not
+    // there was a download before it.
     private enum Milestone {
         static let checked: Double = 2
-        static let downloaded: Double = 55
+        static let downloaded: Double = 45
+        static let prepared: Double = 55
+        static let erased: Double = 60
         static let finished: Double = 100
     }
 
@@ -54,7 +61,6 @@ final class MacOSMediaBuilder {
         // password is asked for, so the prompt can come first and the download
         // can run while the step waits for it.
         let preparation = try await prepare(plan.installer)
-        let start = preparation.progress
 
         state = ProcessState(stage: .authorizing, progress: Milestone.checked)
 
@@ -86,7 +92,7 @@ final class MacOSMediaBuilder {
             // hour, and the erase is the step that cannot be taken back.
             try await self.diskManager.verifyStillPresent(drive)
         } onOutput: { [weak self] output in
-            self?.report(output, from: start)
+            self?.report(output, copying: plan.installer.sizeBytes)
         }
 
         state = ProcessState(stage: .done, progress: Milestone.finished)
@@ -98,9 +104,9 @@ final class MacOSMediaBuilder {
         let destination: URL
     }
 
-    // What the privileged step has to do, what has to be downloaded before it
-    // can do it, and where the bar stands once that download is done.
-    private typealias Prepared = (step: PrivilegedRunner.Preparation, download: Download?, progress: Double)
+    // What the privileged step has to do, and what has to be downloaded before
+    // it can do it.
+    private typealias Prepared = (step: PrivilegedRunner.Preparation, download: Download?)
 
     private func prepare(_ installer: MacOSInstaller) async throws -> Prepared {
         switch installer.origin {
@@ -108,20 +114,16 @@ final class MacOSMediaBuilder {
             let directory = try await scratch.makeTemporaryDirectory()
             let destination = directory.appendingPathComponent("InstallAssistant.pkg")
 
-            return (
-                .package(destination),
-                Download(url: packageURL, destination: destination),
-                Milestone.downloaded
-            )
+            return (.package(destination), Download(url: packageURL, destination: destination))
 
         case .package(let url):
-            return (.package(url), nil, Milestone.checked)
+            return (.package(url), nil)
 
         case .softwareUpdate:
-            return (.fetch(version: installer.version.description), nil, Milestone.checked)
+            return (.fetch(version: installer.version.description), nil)
 
         case .application:
-            return (.application, nil, Milestone.checked)
+            return (.application, nil)
         }
     }
 
@@ -150,26 +152,35 @@ final class MacOSMediaBuilder {
 
     // The privileged step reports by writing to its log; this maps what it has
     // written so far onto the stage and the bar.
-    private func report(_ output: String, from start: Double) {
-        guard let report = CreateInstallMediaOutput.read(output) else { return }
+    private func report(_ output: String, copying expectedBytes: Int64) {
+        guard let report = CreateInstallMediaOutput.read(output, expecting: expectedBytes) else { return }
+
+        let reached: Double
 
         switch report.phase {
         case .preparing:
             state.stage = .preparingInstaller
+            reached = Milestone.downloaded
         case .erasing:
             state.stage = .formatting
+            reached = Milestone.prepared
         case .writing:
             state.stage = .writingInstaller
+            reached = MediaBuilder.overallProgress(
+                report.fraction * 100,
+                from: Milestone.erased,
+                to: Milestone.finished
+            )
         case .finished, .stopped:
             return
         }
 
         state.currentFile = ""
 
-        // A stage can re-report a figure below one already shown - the erase
-        // restarting its own count, a log re-read - and the bar must not go back.
-        let mapped = MediaBuilder.overallProgress(report.progress, from: start, to: Milestone.finished)
-        state.progress = max(state.progress, mapped)
+        // A stage can re-report a figure below one already shown - a drive that
+        // reports less used than it did, a log re-read - and the bar must not go
+        // back.
+        state.progress = max(state.progress, reached)
     }
 
     // Unique per run, so /Volumes/<name> cannot collide with a volume that is

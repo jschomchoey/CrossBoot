@@ -27,7 +27,7 @@ final class CreateInstallMediaOutputTests: XCTestCase {
     }
 
     // A real run only ever moves forward through these lines.
-    func testProgressNeverGoesBackwardsThroughARealRun() throws {
+    func testTheWritingPhaseNeverGoesBackwardsThroughARealRun() throws {
         let steps = [
             "CrossBoot: preparing",
             "CrossBoot: preparing\ninstaller: Installing at base path /",
@@ -45,11 +45,51 @@ final class CreateInstallMediaOutputTests: XCTestCase {
         var previous = -1.0
         for step in steps {
             let report = try XCTUnwrap(CreateInstallMediaOutput.read(step), "no report for: \(step)")
-            XCTAssertGreaterThanOrEqual(report.progress, previous, "progress went backwards at: \(step)")
-            previous = report.progress
+            guard report.phase == .writing || report.phase == .finished else { continue }
+
+            XCTAssertGreaterThanOrEqual(report.fraction, previous, "progress went backwards at: \(step)")
+            previous = report.fraction
         }
 
-        XCTAssertEqual(previous, 100)
+        XCTAssertEqual(previous, 1)
+    }
+
+    // Current releases print nothing at all between starting the copy and
+    // finishing it, so what the step samples off the drive is what moves the bar.
+    func testTheCopyIsMeasuredFromWhatIsOnTheDrive() throws {
+        let installer: Int64 = 15_000_000_000
+        let silent = """
+        CrossBoot: writing
+        Erasing disk: 0%... 100%
+        Copying essential files...
+        """
+
+        let started = try XCTUnwrap(CreateInstallMediaOutput.read(silent, expecting: installer))
+        let quarter = try XCTUnwrap(CreateInstallMediaOutput.read(
+            silent + "\nCrossBoot: copied 3662109", expecting: installer
+        ))
+        let most = try XCTUnwrap(CreateInstallMediaOutput.read(
+            silent + "\nCrossBoot: copied 3662109\nCrossBoot: copied 12000000", expecting: installer
+        ))
+
+        XCTAssertEqual(quarter.fraction, 0.25, accuracy: 0.01)
+        XCTAssertGreaterThan(most.fraction, quarter.fraction)
+        XCTAssertLessThan(started.fraction, quarter.fraction)
+    }
+
+    // A sample bigger than the installer - the volume holds more than its files -
+    // must not run the bar to the end before the drive is bootable.
+    func testAnOverlargeSampleStopsShortOfTheEnd() throws {
+        let report = try XCTUnwrap(CreateInstallMediaOutput.read(
+            "CrossBoot: writing\nCrossBoot: copied 99999999", expecting: 15_000_000_000
+        ))
+
+        XCTAssertEqual(report.fraction, 0.95)
+    }
+
+    func testTheLastSampleIsTheOneRead() {
+        XCTAssertEqual(CreateInstallMediaOutput.lastCopiedBytes(in: "CrossBoot: copied 10\nCrossBoot: copied 20"), 20 * 1024)
+        XCTAssertNil(CreateInstallMediaOutput.lastCopiedBytes(in: "Copying essential files..."))
     }
 
     // Copying is nearly all of the wall clock, so it has to own most of the bar.
@@ -58,9 +98,9 @@ final class CreateInstallMediaOutputTests: XCTestCase {
         let halfCopied = try XCTUnwrap(CreateInstallMediaOutput.read("CrossBoot: writing\nCopying to disk: 50%"))
         let copied = try XCTUnwrap(CreateInstallMediaOutput.read("CrossBoot: writing\nCopying to disk: 100%"))
 
-        XCTAssertLessThan(erasing.progress, halfCopied.progress)
-        XCTAssertLessThan(halfCopied.progress, copied.progress)
-        XCTAssertGreaterThan(copied.progress - halfCopied.progress, erasing.progress - 45)
+        XCTAssertLessThan(erasing.fraction, halfCopied.fraction)
+        XCTAssertLessThan(halfCopied.fraction, copied.fraction)
+        XCTAssertGreaterThan(copied.fraction - halfCopied.fraction, erasing.fraction)
     }
 
     // The log is re-read whole on every poll, so the same text arrives repeatedly.

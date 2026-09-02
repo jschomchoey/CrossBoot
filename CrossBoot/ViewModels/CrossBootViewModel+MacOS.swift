@@ -297,7 +297,13 @@ extension CrossBootViewModel {
 
     private static func successMessage(for plan: MacOSMediaPlan, removesInstaller: Bool) -> String {
         let installer = plan.installer
-        var message = "The drive is ready with \(installer.title). Hold Option at startup to boot from it."
+        // Apple Silicon has no startup keys: the boot picker is the power button
+        // held down, and Option does nothing at all.
+        let howToBoot = MacOSMediaPlan.isAppleSilicon
+            ? "Hold the power button at startup until the startup options appear, then choose it."
+            : "Hold Option at startup to boot from it."
+
+        var message = "The drive is ready with \(installer.title). \(howToBoot)"
 
         // Preparing the installer leaves it in /Applications, which is several
         // gigabytes the user did not ask to keep.

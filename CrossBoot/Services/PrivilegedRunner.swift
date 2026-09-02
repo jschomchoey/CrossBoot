@@ -373,6 +373,11 @@ actor PrivilegedRunner {
 
     exec >>"$LOG" 2>&1
 
+    # The drive sampler below runs in the background, and every way out of this
+    # script has to take it with it - a stop leaves the shell without waiting.
+    sampler=""
+    trap 'kill "$sampler" 2>/dev/null' EXIT
+
     # Every path below is used as an argument, never as code, but this step runs
     # as root and one of its commands removes a directory tree, so a traversal is
     # refused outright rather than relied on to be harmless.
@@ -489,8 +494,28 @@ actor PrivilegedRunner {
         sleep 1
     done
 
+    # createinstallmedia says nothing at all while it copies 15 GB onto a stick
+    # that may take half an hour, so the step reports what has landed there. The
+    # volume is renamed part-way through; the device it sits on is not.
+    sample_drive() {
+        while :; do
+            used=$(/bin/df -k 2>/dev/null | /usr/bin/awk -v device="$DEVICE" '$1 ~ "^" device "s" { print $3; exit }')
+            [ -n "$used" ] && echo "CrossBoot: copied $used"
+            sleep 5
+        done
+    }
+
     echo "CrossBoot: writing"
-    run "$APP/Contents/Resources/createinstallmedia" --volume "/Volumes/$VOLUME" --nointeraction || exit $?
+
+    sample_drive &
+    sampler=$!
+
+    run "$APP/Contents/Resources/createinstallmedia" --volume "/Volumes/$VOLUME" --nointeraction
+    written=$?
+
+    kill "$sampler" 2>/dev/null
+
+    [ "$written" -eq 0 ] || exit "$written"
 
     # Preparing the installer left 12-18 GB in /Applications that the user did
     # not ask to keep. Only a bundle this step created is removed: it has to sit

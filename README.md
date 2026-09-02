@@ -135,6 +135,10 @@ Advanced Options can delete it once the drive is written.
 The download is checked against the byte count Apple publishes and discarded if it disagrees, so a truncated
 transfer fails before the drive is touched rather than after.
 
+Writing the drive is most of a run - 15 GB onto a USB stick - and `createinstallmedia` prints nothing at all
+while it copies. The privileged step therefore samples the drive itself every few seconds, and that is what
+moves the second half of the progress bar.
+
 ## Development
 
 ### Tech Stack
