@@ -52,7 +52,16 @@ extension CrossBootViewModel {
         // added, whatever softwareupdate offered and whatever is already in
         // /Applications, so it is only worth reporting when it left the list
         // with nothing in it.
-        inputError = macOSVersions.isEmpty ? (problem ?? CatalogError.empty.localizedDescription) : nil
+        let reasons = macOSVersions.isEmpty ? [problem ?? CatalogError.empty.localizedDescription] : []
+
+        if refresh {
+            // Asked for by hand, so the answer is worth an alert. The load that
+            // runs on switching mode takes the status line alone.
+            refuse(reasons, title: "Could not reload")
+        } else {
+            sourceError = reasons.first
+        }
+
         loadedVersions = !macOSVersions.isEmpty
     }
 
@@ -86,7 +95,7 @@ extension CrossBootViewModel {
         if selectedVersion?.id == installer.id { selectedVersion = nil }
 
         refreshVersionList()
-        inputError = nil
+        sourceError = nil
     }
 
     func isRemovable(_ installer: MacOSInstaller) -> Bool {
@@ -114,7 +123,7 @@ extension CrossBootViewModel {
         }
 
         refreshVersionList()
-        inputError = refusals.isEmpty ? nil : refusals.joined(separator: " · ")
+        refuse(refusals, title: "Could not add")
     }
 
     private static func installer(at url: URL) async throws -> MacOSInstaller {
@@ -211,7 +220,7 @@ extension CrossBootViewModel {
         }
 
         guard let installer = selectedVersion else {
-            inputError = MacOSMediaPlanError.noInstaller.localizedDescription
+            refuse([MacOSMediaPlanError.noInstaller.localizedDescription], title: "Could not start")
             return
         }
 
@@ -220,7 +229,7 @@ extension CrossBootViewModel {
             plan = try MacOSMediaPlan.make(for: installer)
         } catch {
             // Nothing has been touched yet, so this is still a setup problem.
-            inputError = error.localizedDescription
+            refuse([error.localizedDescription], title: "Could not start")
             return
         }
 

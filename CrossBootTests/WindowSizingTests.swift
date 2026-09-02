@@ -51,7 +51,7 @@ final class WindowSizingTests: XCTestCase {
         }
 
         model.processState = state
-        model.inputError = inputError
+        model.sourceError = inputError
         return model
     }
 

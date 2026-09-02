@@ -24,6 +24,7 @@
 		020 /* AutounattendTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 121 /* AutounattendTests.swift */; };
 		021 /* ProcessStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 122 /* ProcessStateTests.swift */; };
 		022 /* WindowSizingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 123 /* WindowSizingTests.swift */; };
+		023 /* ISOListScrollingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 124 /* ISOListScrollingTests.swift */; };
 		030 /* WindowsImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 130 /* WindowsImage.swift */; };
 		031 /* InstallMediaPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = 131 /* InstallMediaPlan.swift */; };
 		032 /* WimXMLParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 132 /* WimXMLParser.swift */; };
@@ -90,6 +91,7 @@
 		121 /* AutounattendTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutounattendTests.swift; sourceTree = "<group>"; };
 		122 /* ProcessStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessStateTests.swift; sourceTree = "<group>"; };
 		123 /* WindowSizingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowSizingTests.swift; sourceTree = "<group>"; };
+		124 /* ISOListScrollingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ISOListScrollingTests.swift; sourceTree = "<group>"; };
 		130 /* WindowsImage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowsImage.swift; sourceTree = "<group>"; };
 		131 /* InstallMediaPlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InstallMediaPlan.swift; sourceTree = "<group>"; };
 		132 /* WimXMLParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WimXMLParser.swift; sourceTree = "<group>"; };
@@ -246,6 +248,7 @@
 				121 /* AutounattendTests.swift */,
 				122 /* ProcessStateTests.swift */,
 				123 /* WindowSizingTests.swift */,
+				124 /* ISOListScrollingTests.swift */,
 				134 /* MediaPlanTests.swift */,
 				135 /* WimXMLParserTests.swift */,
 				153 /* MacOSCatalogTests.swift */,
@@ -412,6 +415,7 @@
 				020 /* AutounattendTests.swift in Sources */,
 				021 /* ProcessStateTests.swift in Sources */,
 				022 /* WindowSizingTests.swift in Sources */,
+				023 /* ISOListScrollingTests.swift in Sources */,
 				034 /* MediaPlanTests.swift in Sources */,
 				035 /* WimXMLParserTests.swift in Sources */,
 				053 /* MacOSCatalogTests.swift in Sources */,

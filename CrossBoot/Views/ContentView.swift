@@ -135,10 +135,6 @@ struct ContentView: View {
                 onAdd: viewModel.selectISOs,
                 onRemove: viewModel.removeISO
             )
-            // The list draws its own border, so the row must not draw a second
-            // one around it.
-            .listRowInsets(EdgeInsets())
-            .listRowBackground(Color.clear)
         case .macOS:
             MacOSVersionPicker(
                 versions: visibleVersions,

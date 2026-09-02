@@ -28,8 +28,15 @@ class CrossBootViewModel: ObservableObject {
     @Published var isAnalyzing = false
 
     // Bad input and scan failures keep the user on the setup form; only a run
-    // that actually started can finish in a failed state.
-    @Published var inputError: String?
+    // that actually started can finish in a failed state. They are kept apart
+    // because a scan runs on its own: the disk monitor rescans whenever any
+    // disk appears - an ISO being mounted counts - and clearing one message
+    // there used to wipe the refusal the user was still reading.
+    @Published var sourceError: String?
+    @Published var driveError: String?
+
+    // What the user just did outranks what the monitor found on its own.
+    var inputError: String? { sourceError ?? driveError }
 
     // MARK: - Services
     private let diskManager = DiskManager.shared
@@ -74,12 +81,14 @@ class CrossBootViewModel: ObservableObject {
 
         do {
             drives = try await diskManager.listRemovableDrives()
-            inputError = nil
+            driveError = nil
         } catch {
             // Without this the UI just says "No USB Drive Found" and hides why.
             drives = []
             Log.disk.error("Failed to list drives: \(error.localizedDescription, privacy: .public)")
-            inputError = "Could not list drives: \(error.localizedDescription)"
+            // No alert: this also runs from the disk monitor, with nobody
+            // waiting on an answer.
+            driveError = "Could not list drives: \(error.localizedDescription)"
         }
 
         // Match on the whole drive, not just its identifier: identifiers are
@@ -121,11 +130,14 @@ class CrossBootViewModel: ObservableObject {
         let previous = analysisTask
         analysisTask = Task { [weak self] in
             await previous?.value
-            await self?.analyze(urls)
+            let refusals = await self?.analyze(urls) ?? []
 
             guard let self else { return }
+            // Reported once the batch is out of the way, so the alert does not
+            // stand over a list still saying it is reading.
             self.pendingBatches -= 1
             self.isAnalyzing = self.pendingBatches > 0
+            self.refuse(refusals, title: "Could not add")
         }
     }
 
@@ -133,13 +145,13 @@ class CrossBootViewModel: ObservableObject {
         guard !processState.isProcessing else { return }
 
         isoFiles.removeAll { $0.id == iso.id }
-        inputError = nil
+        sourceError = nil
     }
 
     // Each ISO is mounted and inspected as it is added, so a combination Windows
     // Setup could not handle is refused here rather than after the drive is
     // erased. It also gives the list something to say about each file.
-    private func analyze(_ urls: [URL]) async {
+    private func analyze(_ urls: [URL]) async -> [String] {
         // A file that was refused has to still be reported once the rest of the
         // batch has been read: reporting as we go let one good ISO clear the
         // message from the one dropped beside it.
@@ -173,9 +185,7 @@ class CrossBootViewModel: ObservableObject {
             }
         }
 
-        // The status line reserves two lines, so refusals flow into it rather
-        // than each claiming one.
-        inputError = refusals.isEmpty ? nil : refusals.joined(separator: " · ")
+        return refusals
     }
 
     private func architectureConflict(with iso: ISOFile) -> String? {
@@ -191,6 +201,11 @@ class CrossBootViewModel: ObservableObject {
     // MARK: - Main Process
 
     func createBootableUSB() {
+        // The run reports for itself from here; nothing it was started despite
+        // may keep the status line.
+        sourceError = nil
+        driveError = nil
+
         currentTask = Task {
             switch mediaKind {
             case .windows: await performWindowsRun()
@@ -206,7 +221,7 @@ class CrossBootViewModel: ObservableObject {
         guard !processState.isProcessing, kind != mediaKind else { return }
 
         mediaKind = kind
-        inputError = nil
+        sourceError = nil
         processState = ProcessState()
     }
 
@@ -235,7 +250,7 @@ class CrossBootViewModel: ObservableObject {
             plan = try InstallMediaPlan.make(from: isoFiles)
         } catch {
             // Nothing has been touched yet, so this is still a setup problem.
-            inputError = error.localizedDescription
+            refuse([error.localizedDescription], title: "Could not start")
             return
         }
 
@@ -310,6 +325,22 @@ class CrossBootViewModel: ObservableObject {
 
         let count = groups.flatMap(\.images).count
         return "The drive is ready with \(count) Windows editions. You can eject it and boot from it."
+    }
+
+    // A refusal the user's own action ran into: a drop, the open panel, the
+    // button. The status line alone was missed, so it is also said once in an
+    // alert - the line at the bottom of the window is not where anyone looks.
+    // No reasons means the last refusal no longer stands.
+    func refuse(_ reasons: [String], title: String) {
+        guard !reasons.isEmpty else {
+            sourceError = nil
+            return
+        }
+
+        // The status line has two lines for all of them; the alert has room to
+        // give each its own.
+        sourceError = reasons.joined(separator: " · ")
+        showAlert(title: title, message: reasons.joined(separator: "\n"), style: .warning)
     }
 
     func showAlert(title: String, message: String, style: NSAlert.Style) {

@@ -1,10 +1,18 @@
 import SwiftUI
 
 /// The source list, built the way macOS builds an editable list in Settings:
-/// one bordered container with a plus/minus bar attached to its bottom edge.
+/// one bordered well with a plus/minus bar attached to its bottom edge.
 ///
-/// The container has a fixed height and scrolls internally, so adding a fourth
-/// ISO cannot resize a window that is pinned to its content.
+/// The well has a fixed height and scrolls internally, so adding a fourth ISO
+/// cannot resize a window that is pinned to its content.
+///
+/// The rows are drawn rather than listed, and the well is drawn here rather
+/// than left to the section around it. A `List` inside a `Form` is laid out as
+/// inline content: it fills the section's card, but AppKit reports its scroll
+/// view with no scroller and no elasticity, so a fourth ISO was drawn where
+/// nothing could reach it. Anything else in that row scrolls, but is inset
+/// inside the card - `listRowInsets` does not reach it - which left the bar
+/// floating short of the card's edges. Drawing the well settles both.
 struct ISOListView: View {
     let isoFiles: [ISOFile]
     // The ISO that supplies the boot files, which the ordering alone does not say.
@@ -14,40 +22,69 @@ struct ISOListView: View {
     let onRemove: (ISOFile) -> Void
 
     @State private var selection: ISOFile.ID?
+    @Environment(\.controlActiveState) private var activeState
 
     private static let visibleRows = 3
     private static let rowHeight: CGFloat = 42
     private static let barHeight: CGFloat = 24
+    private static let cornerRadius: CGFloat = 6
+
+    private static var contentHeight: CGFloat { CGFloat(visibleRows) * rowHeight }
 
     var body: some View {
-        List(selection: $selection) {
-            ForEach(isoFiles) { iso in
-                row(iso)
-                    .frame(height: Self.rowHeight)
+        // The bar stands beside the rows rather than over them: nothing scrolls
+        // underneath it, so it needs no fill of its own to hide anything.
+        VStack(spacing: 0) {
+            ScrollView {
+                if isoFiles.isEmpty {
+                    emptyLabel
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(isoFiles) { iso in
+                            row(iso)
+                        }
+                    }
+                }
             }
+
+            bar
         }
-        // The section's card is the container. A bordered list would draw a
-        // second frame inside it, which is the nesting this replaced.
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .overlay { if isoFiles.isEmpty { emptyLabel } }
-        .safeAreaInset(edge: .bottom, spacing: 0) { bar }
-        .frame(height: CGFloat(Self.visibleRows) * Self.rowHeight + Self.barHeight)
+        .frame(height: Self.contentHeight + Self.barHeight)
+        // No fill: the well takes the colour of the card it sits in, which
+        // macOS tints with the desktop behind the window. A fixed colour stayed
+        // grey while everything around it turned with the wallpaper.
+        .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius))
+        .overlay {
+            RoundedRectangle(cornerRadius: Self.cornerRadius)
+                .strokeBorder(Color(nsColor: .separatorColor))
+        }
     }
 
+    // Said in the rows' own space rather than over them, so it sits where the
+    // first ISO will and not behind the bar.
     private var emptyLabel: some View {
         Text("Drag Windows ISO files here")
             .font(.callout)
             .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity)
+            .frame(height: Self.contentHeight)
             .allowsHitTesting(false)
     }
 
     private func row(_ iso: ISOFile) -> some View {
-        HStack(spacing: 8) {
+        let isSelected = iso.id == selection
+        // A selected row is filled with the accent colour only while this
+        // window is the one being used, which is what every list on the system
+        // does. Everything in the row is then drawn in the colour AppKit picks
+        // to sit on that fill - white against blue, black against yellow - so
+        // the row stays readable whichever accent colour is set.
+        let emphasized = isSelected && activeState != .inactive
+
+        return HStack(spacing: 8) {
             // An ISO with no install image cannot be combined with others, and
             // the list is where that has to be visible.
             Image(systemName: iso.images.isEmpty ? "exclamationmark.triangle.fill" : "opticaldisc.fill")
-                .foregroundStyle(iso.images.isEmpty ? Color.orange : Color.accentColor)
+                .foregroundStyle(emphasized ? Self.selectedText : (iso.images.isEmpty ? Color.orange : Color.accentColor))
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(iso.name)
@@ -56,7 +93,7 @@ struct ISOListView: View {
 
                 Text(iso.summary)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Self.secondaryTint(emphasized))
                     .lineLimit(1)
             }
 
@@ -65,12 +102,46 @@ struct ISOListView: View {
             if iso.id == baseID {
                 Text("base")
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Self.secondaryTint(emphasized))
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
-                    .background(Capsule().fill(.quaternary))
+                    .background(Capsule().fill(Self.badgeTint(emphasized)))
                     .help("Supplies the boot files and the setup that installs every edition")
             }
+        }
+        .foregroundStyle(emphasized ? Self.selectedText : Color.primary)
+        .padding(.horizontal, 10)
+        .frame(height: Self.rowHeight)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(selectionFill(isSelected, emphasized: emphasized))
+        // The gaps between the name and the badge select the row too.
+        .contentShape(Rectangle())
+        .onTapGesture { selection = iso.id }
+        // Drawn rows carry none of the meaning a list row carries by itself.
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+    }
+
+    // What AppKit draws on top of an emphasized selection, whatever accent
+    // colour the system is set to.
+    private static let selectedText = Color(nsColor: .alternateSelectedControlTextColor)
+
+    private static func secondaryTint(_ emphasized: Bool) -> AnyShapeStyle {
+        emphasized ? AnyShapeStyle(selectedText.opacity(0.8)) : AnyShapeStyle(.secondary)
+    }
+
+    private static func badgeTint(_ emphasized: Bool) -> AnyShapeStyle {
+        emphasized ? AnyShapeStyle(selectedText.opacity(0.25)) : AnyShapeStyle(.quaternary)
+    }
+
+    @ViewBuilder
+    private func selectionFill(_ isSelected: Bool, emphasized: Bool) -> some View {
+        if emphasized {
+            Color(nsColor: .selectedContentBackgroundColor)
+        } else if isSelected {
+            Color(nsColor: .unemphasizedSelectedContentBackgroundColor)
+        } else {
+            Color.clear
         }
     }
 
@@ -116,9 +187,15 @@ struct ISOListView: View {
                 Spacer()
             }
             .buttonStyle(.borderless)
-            .frame(height: Self.barHeight)
-            .background(.quaternary.opacity(0.4))
+            .frame(maxHeight: .infinity)
         }
+        // The divider counts towards the bar, so the rows above it are left
+        // exactly the height the list says it shows.
+        .frame(height: Self.barHeight)
+        // A tint over the card rather than a colour of its own: it darkens in
+        // the light appearance and lightens in the dark one, and it turns with
+        // the window the way everything around it does.
+        .background(.quaternary)
     }
 }
 
