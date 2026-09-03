@@ -125,3 +125,16 @@ Temporary Items
 
 # Claude Code
 CLAUDE.md
+
+# Build products / exports
+*.app
+*.xcarchive
+*.dmg
+*.pkg
+*.xcresult
+
+# Swift Package Manager local state
+.swiftpm/
+
+# Claude Code
+.claude/settings.local.json
